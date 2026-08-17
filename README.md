@@ -4,7 +4,7 @@
 
 CaptionMiner takes one or more local media files, transcribes their speech with `faster-whisper`, and writes a matching `.srt` subtitle file for each source. It does not style captions, modify the media, upload content, or decide how subtitles should look. Styling remains where it belongs: in the video editor and under the user's control.
 
-> **Status:** early MVP / v0.1.0. The transcription pipeline, SRT writer, CLI, and desktop GUI are implemented and covered by dependency-free unit tests. Real recordings and editor-version combinations still need broader field testing.
+> **Status:** early alpha / v0.1.0. The transcription pipeline, SRT writer, CLI, desktop GUI, and repeatable portable Windows build are implemented. Real recordings, clean-machine builds, and editor-version combinations still need broader field testing.
 
 ## What CaptionMiner does
 
@@ -110,6 +110,7 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 - **Atomic writes** — incomplete jobs do not leave a half-written SRT behind.
 - **CLI and desktop GUI** — automation and drag-and-drop workflows use the same core.
 - **Diagnostic command** — reports installed versions and CTranslate2/CUDA visibility.
+- **Repeatable Windows build** — PyInstaller produces one launchable EXE folder and a versioned portable ZIP.
 
 ---
 
@@ -269,7 +270,29 @@ This remains one reproducible field case, not proof that every omission can be r
 
 ---
 
-## Quick start — Windows
+## Portable Windows application
+
+CaptionMiner now mirrors HighlightMiner's repeatable PyInstaller packaging workflow. From the repository root:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\build_windows.ps1
+```
+
+The default build runs Ruff and the full test suite, freezes the application, smoke-tests the packaged CLI and dependency report, and creates:
+
+```text
+dist\CaptionMiner\CaptionMiner.exe
+dist\CaptionMiner-v0.1.0-windows-x64.zip
+```
+
+Double-click `CaptionMiner.exe` to open the GUI. The folder's `_internal` directory must remain beside it. This is intentionally PyInstaller **onedir**, like HighlightMiner, instead of a literal `--onefile` package that extracts the Qt/CTranslate2 runtime on every launch.
+
+The packaged app does not require Python. Whisper models are still downloaded into the normal user cache when first selected, and CUDA still requires a compatible NVIDIA runtime. See [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md) for the exact build contents, switches, CI artifact, CUDA behavior, and troubleshooting.
+
+---
+
+## Quick start — Windows source installation
 
 ### 1. Clone or download CaptionMiner
 
@@ -695,6 +718,7 @@ Whisper is speech recognition, not source separation. Cleaner dialogue audio wil
 CaptionMiner/
 ├── .github/
 │   └── workflows/
+│       ├── build-windows-exe.yml
 │       └── tests.yml
 ├── docs/
 │   └── assets/
@@ -714,18 +738,23 @@ CaptionMiner/
 │   ├── subtitles.py
 │   └── transcribe.py
 ├── tests/
+│   ├── test_cli.py
 │   ├── test_config.py
 │   ├── test_output.py
+│   ├── test_packaging.py
 │   ├── test_pipeline.py
 │   ├── test_progress.py
 │   ├── test_subtitles.py
 │   └── test_transcribe.py
 ├── ATTRIBUTIONS.md
+├── BUILD_WINDOWS.md
+├── CaptionMiner.spec
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── README.md
 ├── SECURITY.md
+├── build_windows.ps1
 ├── pyproject.toml
 ├── run.bat
 └── setup.ps1
@@ -763,7 +792,7 @@ Format:
 
 The unit tests intentionally avoid importing `faster-whisper` and PySide6 unless that functionality is under test. This keeps cue/output tests fast and permits CI to validate the deterministic application logic without downloading speech models.
 
-GitHub Actions tests Python 3.10, 3.12, and 3.13 on Windows. CI does not claim that CUDA inference works merely because pure logic tests pass; GPU behavior requires a real compatible NVIDIA environment.
+GitHub Actions tests Python 3.10, 3.12, and 3.13 on Windows. A separate Windows packaging workflow builds the portable folder, verifies frozen dependency imports, smoke-tests the offscreen PySide6 GUI, and uploads the versioned ZIP as an artifact. CI does not claim that CUDA inference works merely because CPU packaging succeeds; GPU behavior requires a real compatible NVIDIA environment.
 
 ---
 
@@ -883,7 +912,7 @@ See [`SECURITY.md`](SECURITY.md).
 - No translation is performed.
 - No visual styling is encoded.
 - Editor import behavior can change after CaptionMiner is released.
-- No signed Windows installer or prebuilt executable is provided in v0.1.0.
+- The portable Windows executable is unsigned and distributed as a folder/ZIP rather than an installer.
 
 The correct expectation is **a strong local first-pass transcript that saves typing**, not a court-certified record of reality.
 
@@ -900,7 +929,7 @@ The correct expectation is **a strong local first-pass transcript that saves typ
 
 ### v0.2 — packaging and workflow polish
 
-- Produce a repeatable Windows application build.
+- Validate the repeatable Windows application build on a clean non-development machine.
 - Add byte-level first-run model download progress if the upstream model-loading API exposes it reliably.
 - Persist safe GUI preferences.
 - Add optional watch-folder/batch automation if real usage justifies it.
