@@ -11,8 +11,9 @@ binaries = []
 hiddenimports = []
 
 # These packages contain dynamic imports, native libraries, and runtime data.
-# Keep the first portable build deliberately conservative; executable size can
-# be optimized after clean-machine Windows validation.
+# Keep the first portable build deliberately conservative. Replace collect_all
+# package by package only after clean-machine CPU and CUDA validation identifies
+# the minimal safe data, binary, hidden-import, and metadata sets.
 for package in ("faster_whisper", "ctranslate2", "av"):
     package_datas, package_binaries, package_hidden = collect_all(package)
     datas += package_datas

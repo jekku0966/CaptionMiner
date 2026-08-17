@@ -25,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Recovered clearly audible dialogue that Whisper skipped solely because the exported clip placed it unfavorably inside a whole-file decoding window.
 - Allowed a quality profile to recover from an empty primary pass before raising `no speech was detected`.
 - Ignored malformed or non-finite model word timestamps instead of aborting the entire transcription.
+- Recreated an incompatible or unreadable Windows build environment instead of silently reusing an unsupported Python interpreter.
+- Guarded frozen-GUI smoke-test cleanup when Windows cannot start the process.
 
 ### Changed
 
@@ -34,6 +36,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Corrected the model comparison documentation after manual review found missing dialogue in the initially successful `large-v2` output.
 - Removed repeated full-timeline sorting while merging recovered words; merged output is now sorted once after deduplication.
 - Raised the PyInstaller build requirement to the packaging baseline used by HighlightMiner.
+- Centralized `pyproject.toml` version loading in one TOML-aware helper shared by builds, CI, and tests.
+- Restricted portable CUDA copying to an explicit CUDA 12 / cuDNN 9 allowlist under `runtime\cuda`.
+- Kept conservative PyInstaller package collection until clean-machine CPU and CUDA validation establishes a safe minimal bundle.
 
 ### Planned
 

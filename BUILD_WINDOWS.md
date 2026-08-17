@@ -46,7 +46,7 @@ The script will:
 
 1. Read and validate the project version.
 2. Require an x64 Windows build host.
-3. Create or reuse `.build-venv`.
+3. Create or reuse `.build-venv`, recreating it when its Python is unreadable or older than 3.10.
 4. Install CaptionMiner, development tools, and PyInstaller.
 5. Run Ruff and the complete unit test suite.
 6. Build `CaptionMiner.exe` using `CaptionMiner.spec`.
@@ -88,22 +88,24 @@ No Python installation is needed to run the packaged folder. Do not separate `Ca
 
 The build always supports CPU transcription through CTranslate2 INT8. CUDA acceleration still requires compatible NVIDIA drivers and CUDA/cuDNN runtime libraries.
 
-The builder does not download or commit NVIDIA runtime binaries. If compatible portable DLLs are already placed in the repository root, the script copies files matching these runtime families beside the executable:
+The builder does not download or commit NVIDIA runtime binaries. To supply a portable runtime locally, create `runtime\cuda` under the repository root and place only the supported CUDA 12 / cuDNN 9 files there. The builder uses an exact allowlist and never sweeps arbitrary DLLs from the repository root.
 
-- `cublas*.dll`
-- `cudnn*.dll`
-- `nvrtc*.dll`
-- `zlibwapi.dll`
-
-The currently expected core portable files are:
+The required allowlisted files are:
 
 ```text
 cublas64_12.dll
 cublasLt64_12.dll
 cudnn64_9.dll
+cudnn_adv64_9.dll
+cudnn_cnn64_9.dll
+cudnn_engines_precompiled64_9.dll
+cudnn_engines_runtime_compiled64_9.dll
+cudnn_graph64_9.dll
+cudnn_heuristic64_9.dll
+cudnn_ops64_9.dll
 ```
 
-If they are absent, the script warns but does not fail. The resulting build remains usable on CPU and on systems where CTranslate2 can resolve a compatible CUDA runtime normally.
+`zlibwapi.dll` is optional and copied from the same directory when present. Files with any other name are ignored. If one or more required DLLs are absent, the script warns but does not fail. The resulting build remains usable on CPU and on systems where CTranslate2 can resolve a compatible CUDA runtime normally.
 
 ## Models and offline use
 
@@ -136,6 +138,12 @@ The CI runner does not download or redistribute external NVIDIA CUDA/cuDNN DLLs.
 
 A literal `--onefile` mode may be evaluated later, but it should only replace onedir if clean-machine testing demonstrates a real distribution benefit that outweighs slower startup and harder native-library diagnostics.
 
+### Bundle-size optimization
+
+`CaptionMiner.spec` deliberately uses PyInstaller's conservative `collect_all` behavior for faster-whisper, CTranslate2, and PyAV. Those packages use dynamic imports, native libraries, and runtime data that can appear unused during static analysis. Trimming them before clean-machine CPU and CUDA validation risks producing a smaller archive that fails only on another computer.
+
+After that validation, optimize one package at a time, rebuild from a clean environment, and repeat the frozen `doctor`, GUI, CPU-transcription, and CUDA-transcription checks. Record every removed data, binary, hidden-import, or metadata entry so a dependency upgrade can be compared against the known-good set.
+
 ## Troubleshooting
 
 ### PowerShell blocks the script
@@ -150,6 +158,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 ### Rebuild from a completely clean environment
 
 Delete `.build-venv`, `build`, and `dist`, then run the script again. These are generated directories and are ignored by Git.
+
+The builder also checks the interpreter inside an existing `.build-venv`. If its version cannot be read or is older than Python 3.10, the generated environment is removed and recreated with a compatible `py` launcher or `python` from `PATH`.
 
 ### The EXE launches but CUDA fails
 
