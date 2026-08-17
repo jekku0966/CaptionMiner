@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1160" viewBox="0 0 1200 1160" role="img" aria-labelledby="title description">
+  <title id="title">CaptionMiner 0.1.0 desktop GUI preview</title>
+  <desc id="description">The CaptionMiner window with a media queue, transcription settings, output controls, progress bar, and processing log.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#172033" flood-opacity="0.16"/>
+    </filter>
+    <style>
+      .ui { font-family: "Segoe UI", Arial, sans-serif; fill: #20242a; }
+      .title { font-size: 18px; font-weight: 600; }
+      .heading { font-size: 34px; font-weight: 600; }
+      .body { font-size: 16px; }
+      .label { font-size: 16px; font-weight: 600; }
+      .muted { fill: #626a75; }
+      .small { font-size: 14px; }
+      .control { fill: #ffffff; stroke: #c7cdd6; stroke-width: 1.5; }
+      .button { fill: #f6f7f9; stroke: #bec5cf; stroke-width: 1.5; }
+      .buttonText { font-size: 15px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="1160" fill="#eef1f5"/>
+  <rect x="20" y="20" width="1160" height="1120" rx="12" fill="#ffffff" filter="url(#shadow)"/>
+
+  <path d="M32 20h1136a12 12 0 0 1 12 12v42H20V32a12 12 0 0 1 12-12z" fill="#f7f8fa"/>
+  <line x1="20" y1="74" x2="1180" y2="74" stroke="#d7dce3"/>
+  <text class="ui title" x="42" y="54">CaptionMiner 0.1.0</text>
+  <g class="ui" stroke="#59616c" stroke-width="1.6" fill="none">
+    <line x1="1072" y1="48" x2="1087" y2="48"/>
+    <rect x="1110" y="39" width="14" height="14"/>
+    <line x1="1148" y1="40" x2="1162" y2="54"/>
+    <line x1="1162" y1="40" x2="1148" y2="54"/>
+  </g>
+
+  <text class="ui heading" x="60" y="124">CaptionMiner</text>
+  <text class="ui body muted" x="60" y="160">Drop exported clips below. CaptionMiner transcribes them locally and creates plain SRT subtitle files;</text>
+  <text class="ui body muted" x="60" y="184">styling remains in your video editor.</text>
+
+  <rect class="control" x="60" y="208" width="1080" height="154" rx="5"/>
+  <rect x="61" y="209" width="1078" height="46" rx="4" fill="#edf4ff"/>
+  <text class="ui body" x="80" y="238">D:\Clips\H001_controller_incident.mp4</text>
+  <line x1="60" y1="255" x2="1140" y2="255" stroke="#e2e6eb"/>
+  <text class="ui body" x="80" y="286">D:\Clips\H002_perfectly_sensible_idea.mp4</text>
+  <line x1="60" y1="303" x2="1140" y2="303" stroke="#e2e6eb"/>
+  <text class="ui body muted" x="80" y="334">Drop local video or audio files here</text>
+
+  <g class="ui">
+    <rect class="button" x="60" y="380" width="114" height="40" rx="5"/>
+    <text class="buttonText" x="117" y="400">Add files</text>
+    <rect class="button" x="186" y="380" width="160" height="40" rx="5"/>
+    <text class="buttonText" x="266" y="400">Remove selected</text>
+    <rect class="button" x="358" y="380" width="86" height="40" rx="5"/>
+    <text class="buttonText" x="401" y="400">Clear</text>
+  </g>
+
+  <rect x="60" y="446" width="1080" height="382" rx="5" fill="#ffffff" stroke="#c7cdd6" stroke-width="1.5"/>
+  <rect x="80" y="434" width="116" height="24" fill="#ffffff"/>
+  <text class="ui label" x="88" y="452">Transcription</text>
+
+  <text class="ui label" x="90" y="500">Accuracy profile</text>
+  <rect class="control" x="360" y="472" width="740" height="42" rx="5"/>
+  <text class="ui body" x="378" y="499">Balanced — medium</text>
+  <path d="M1070 488l7 8 7-8" fill="none" stroke="#59616c" stroke-width="2"/>
+
+  <text class="ui label" x="90" y="558">Spoken language</text>
+  <rect class="control" x="360" y="530" width="740" height="42" rx="5"/>
+  <text class="ui body" x="378" y="557">Auto-detect</text>
+  <path d="M1070 546l7 8 7-8" fill="none" stroke="#59616c" stroke-width="2"/>
+
+  <text class="ui label" x="90" y="616">Processing device</text>
+  <rect class="control" x="360" y="588" width="740" height="42" rx="5"/>
+  <text class="ui body" x="378" y="615">Automatic</text>
+  <path d="M1070 604l7 8 7-8" fill="none" stroke="#59616c" stroke-width="2"/>
+
+  <text class="ui label" x="90" y="674">Custom vocabulary</text>
+  <rect class="control" x="360" y="646" width="740" height="42" rx="5"/>
+  <text class="ui body muted" x="378" y="673">Optional names/terms: Snarkos, Veadotube, TwitchDownloader</text>
+
+  <text class="ui label" x="90" y="732">Output folder</text>
+  <rect class="control" x="360" y="704" width="620" height="42" rx="5"/>
+  <text class="ui body muted" x="378" y="731">Empty = create each SRT beside its source clip</text>
+  <rect class="button" x="992" y="704" width="108" height="42" rx="5"/>
+  <text class="ui buttonText" x="1046" y="725">Browse</text>
+
+  <rect class="control" x="360" y="772" width="20" height="20" rx="3"/>
+  <text class="ui body" x="394" y="789">Overwrite an existing same-named SRT</text>
+
+  <rect x="60" y="852" width="130" height="44" rx="5" fill="#2869d8"/>
+  <text class="ui buttonText" x="125" y="874" fill="#ffffff">Transcribe</text>
+  <rect x="202" y="852" width="96" height="44" rx="5" fill="#f1f3f5" stroke="#d1d6dd"/>
+  <text class="ui buttonText muted" x="250" y="874">Cancel</text>
+
+  <rect x="60" y="920" width="1080" height="20" rx="4" fill="#e8ebef" stroke="#c7cdd6"/>
+  <text class="ui body" x="60" y="974">Ready</text>
+
+  <rect class="control" x="60" y="998" width="1080" height="108" rx="5"/>
+  <text class="ui small muted" x="78" y="1026">Processing log</text>
+</svg>

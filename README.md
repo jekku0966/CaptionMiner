@@ -111,6 +111,16 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 
 ---
 
+## Current desktop GUI
+
+![CaptionMiner 0.1.0 desktop GUI layout preview](docs/assets/captionminer-gui-preview.png)
+
+> **Layout preview:** shown with example queue entries so the file list is visible. CaptionMiner uses native PySide6/Qt controls, so fonts, title-bar appearance, spacing, and control styling can vary slightly with the installed Windows version, display scaling, and system theme.
+
+The interface is deliberately utilitarian: queue clips, select transcription settings, choose where the SRT files go, and start the batch. Subtitle styling remains entirely inside Resolve, Premiere Pro, or CapCut.
+
+---
+
 ## Explicit non-goals
 
 CaptionMiner v0.1 does **not**:
@@ -638,6 +648,10 @@ CaptionMiner/
 ├── .github/
 │   └── workflows/
 │       └── tests.yml
+├── docs/
+│   └── assets/
+│       ├── captionminer-gui-preview.png
+│       └── captionminer-gui-preview.svg
 ├── captionminer/
 │   ├── __init__.py
 │   ├── __main__.py

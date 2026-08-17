@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Current CaptionMiner desktop GUI layout preview in the README.
+
 ### Planned
 
 - Validate real exported clips across current Resolve, Premiere Pro, and CapCut Desktop releases.
