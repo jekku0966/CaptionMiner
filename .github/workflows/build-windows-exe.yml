@@ -6,6 +6,7 @@ on:
     paths:
       - "captionminer/**"
       - "tests/**"
+      - "tools/**"
       - "CaptionMiner.spec"
       - "build_windows.ps1"
       - "BUILD_WINDOWS.md"
@@ -16,6 +17,7 @@ on:
     paths:
       - "captionminer/**"
       - "tests/**"
+      - "tools/**"
       - "CaptionMiner.spec"
       - "build_windows.ps1"
       - "BUILD_WINDOWS.md"
@@ -44,7 +46,7 @@ jobs:
         id: project
         shell: powershell
         run: |
-          $version = python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          $version = python .\tools\project_version.py
           if (-not $version) { throw "Could not read project version from pyproject.toml." }
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Packaging CaptionMiner v$version for windows-x64"
@@ -75,9 +77,10 @@ jobs:
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
           $exe = Resolve-Path ".\dist\CaptionMiner\CaptionMiner.exe"
-          $process = Start-Process -FilePath $exe -WorkingDirectory ".\dist\CaptionMiner" -PassThru
+          $process = $null
 
           try {
+            $process = Start-Process -FilePath $exe -WorkingDirectory ".\dist\CaptionMiner" -PassThru
             Start-Sleep -Seconds 8
             if ($process.HasExited) {
               throw "CaptionMiner.exe exited during the GUI smoke test. Exit code: $($process.ExitCode)"
@@ -85,7 +88,7 @@ jobs:
             Write-Host "Frozen PySide6 GUI remained alive for the smoke-test interval."
           }
           finally {
-            if (-not $process.HasExited) {
+            if ($process -and -not $process.HasExited) {
               & taskkill.exe /PID $process.Id /T /F | Out-Null
             }
           }

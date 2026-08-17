@@ -8,51 +8,99 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 
-$PyprojectPath = Join-Path $RepoRoot "pyproject.toml"
-$PyprojectText = Get-Content $PyprojectPath -Raw
-if ($PyprojectText -notmatch '(?m)^version\s*=\s*"([^"]+)"') {
-    throw "Could not read project version from pyproject.toml."
-}
-$Version = $Matches[1]
-
 $HostArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 if ($HostArchitecture -ne "X64") {
     throw "CaptionMiner Windows packaging currently supports x64 only. Detected architecture: $HostArchitecture"
 }
 
-$PackageName = "CaptionMiner-v$Version-windows-x64"
+function Get-PythonVersionInfo {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Executable,
+        [string[]]$Arguments = @()
+    )
 
-Write-Host "CaptionMiner Windows build"
-Write-Host "=========================="
-Write-Host "Version:      $Version"
-Write-Host "Architecture: windows-x64"
-Write-Host ""
+    try {
+        $VersionOutput = & $Executable @Arguments --version 2>&1
+    }
+    catch {
+        return $null
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        return $null
+    }
+
+    $VersionMatch = [regex]::Match(($VersionOutput -join " "), 'Python\s+(\d+)\.(\d+)(?:\.(\d+))?')
+    if (-not $VersionMatch.Success) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        Major = [int]$VersionMatch.Groups[1].Value
+        Minor = [int]$VersionMatch.Groups[2].Value
+        Label = "$($VersionMatch.Groups[1].Value).$($VersionMatch.Groups[2].Value)"
+    }
+}
+
+function Test-CompatiblePython {
+    param($VersionInfo)
+
+    return $null -ne $VersionInfo -and (
+        $VersionInfo.Major -gt 3 -or
+        ($VersionInfo.Major -eq 3 -and $VersionInfo.Minor -ge 10)
+    )
+}
 
 $BuildVenv = Join-Path $RepoRoot ".build-venv"
 $BuildPython = Join-Path $BuildVenv "Scripts\python.exe"
 
+if (Test-Path $BuildPython) {
+    $ExistingVersion = Get-PythonVersionInfo -Executable $BuildPython
+    if (-not (Test-CompatiblePython $ExistingVersion)) {
+        Write-Host "Existing build environment has an unsupported or unreadable Python version. Recreating..."
+        Remove-Item $BuildVenv -Recurse -Force
+    }
+    else {
+        Write-Host "Reusing .build-venv with Python $($ExistingVersion.Label)."
+    }
+}
+
 if (-not (Test-Path $BuildPython)) {
     Write-Host "Creating isolated build environment..."
 
-    $PythonCommand = Get-Command python -ErrorAction SilentlyContinue
     $PyLauncher = Get-Command py -ErrorAction SilentlyContinue
+    $PythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    $PythonExecutable = $null
+    $PythonArguments = @()
+    $SelectedVersion = $null
 
-    if ($PythonCommand) {
-        & python -m venv $BuildVenv
-    }
-    elseif ($PyLauncher) {
-        & py -3 -m venv $BuildVenv
-    }
-    else {
-        throw "Python 3.10+ was not found. Install Python first or put it on PATH."
+    if ($PyLauncher) {
+        $LauncherVersion = Get-PythonVersionInfo -Executable $PyLauncher.Source -Arguments @("-3")
+        if (Test-CompatiblePython $LauncherVersion) {
+            $PythonExecutable = $PyLauncher.Source
+            $PythonArguments = @("-3")
+            $SelectedVersion = $LauncherVersion
+        }
     }
 
-    if ($LASTEXITCODE -ne 0) {
+    if (-not $PythonExecutable -and $PythonCommand) {
+        $PathVersion = Get-PythonVersionInfo -Executable $PythonCommand.Source
+        if (Test-CompatiblePython $PathVersion) {
+            $PythonExecutable = $PythonCommand.Source
+            $SelectedVersion = $PathVersion
+        }
+    }
+
+    if (-not $PythonExecutable) {
+        throw "Python 3.10 or newer is required. Install it or expose it through the 'py' launcher or PATH."
+    }
+
+    Write-Host "Creating the build environment with Python $($SelectedVersion.Label)..."
+    & $PythonExecutable @PythonArguments -m venv $BuildVenv
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $BuildPython)) {
         throw "Failed to create the build virtual environment."
     }
-}
-else {
-    Write-Host "Reusing existing .build-venv."
 }
 
 Write-Host "Updating build tooling..."
@@ -62,6 +110,21 @@ if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
 Write-Host "Installing CaptionMiner + build dependencies..."
 & $BuildPython -m pip install -e ".[dev,build]"
 if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
+
+$VersionScript = Join-Path $RepoRoot "tools\project_version.py"
+$VersionOutput = & $BuildPython $VersionScript
+if ($LASTEXITCODE -ne 0 -or -not $VersionOutput) {
+    throw "Could not read project.version through tools/project_version.py."
+}
+$Version = ($VersionOutput -join "").Trim()
+$PackageName = "CaptionMiner-v$Version-windows-x64"
+
+Write-Host ""
+Write-Host "CaptionMiner Windows build"
+Write-Host "=========================="
+Write-Host "Version:      $Version"
+Write-Host "Architecture: windows-x64"
+Write-Host ""
 
 if (-not $SkipTests) {
     Write-Host ""
@@ -95,27 +158,33 @@ foreach ($Name in @("README.md", "BUILD_WINDOWS.md", "ATTRIBUTIONS.md", "LICENSE
     }
 }
 
-# Carry forward portable CUDA 12 / cuDNN 9 files that the builder has already
-# placed in the repository root. CaptionMiner never downloads or commits them.
-$CudaPatterns = @(
-    '^cublas.*\.dll$',
-    '^cudnn.*\.dll$',
-    '^nvrtc.*\.dll$',
-    '^zlibwapi\.dll$'
+# Carry forward only explicitly supported CUDA 12 / cuDNN 9 files from the
+# dedicated local runtime directory. CaptionMiner never downloads or commits them.
+$CudaRuntimeRoot = Join-Path $RepoRoot "runtime\cuda"
+$RequiredCudaDlls = @(
+    "cublas64_12.dll",
+    "cublasLt64_12.dll",
+    "cudnn64_9.dll",
+    "cudnn_adv64_9.dll",
+    "cudnn_cnn64_9.dll",
+    "cudnn_engines_precompiled64_9.dll",
+    "cudnn_engines_runtime_compiled64_9.dll",
+    "cudnn_graph64_9.dll",
+    "cudnn_heuristic64_9.dll",
+    "cudnn_ops64_9.dll"
 )
-$CudaFiles = Get-ChildItem -Path $RepoRoot -File -Filter "*.dll" -ErrorAction SilentlyContinue | Where-Object {
-    $Name = $_.Name
-    ($CudaPatterns | Where-Object { $Name -match $_ }).Count -gt 0
+$OptionalCudaDlls = @("zlibwapi.dll")
+
+foreach ($Name in @($RequiredCudaDlls + $OptionalCudaDlls)) {
+    $Source = Join-Path $CudaRuntimeRoot $Name
+    if (Test-Path $Source) {
+        Copy-Item $Source (Join-Path $DistRoot $Name) -Force
+    }
 }
 
-foreach ($File in $CudaFiles) {
-    Copy-Item $File.FullName (Join-Path $DistRoot $File.Name) -Force
-}
-
-$CoreCuda = @("cublas64_12.dll", "cublasLt64_12.dll", "cudnn64_9.dll")
-$MissingCoreCuda = @($CoreCuda | Where-Object { -not (Test-Path (Join-Path $DistRoot $_)) })
-if ($MissingCoreCuda.Count -gt 0) {
-    Write-Warning ("Portable CUDA runtime was not fully added: " + ($MissingCoreCuda -join ", "))
+$MissingCuda = @($RequiredCudaDlls | Where-Object { -not (Test-Path (Join-Path $DistRoot $_)) })
+if ($MissingCuda.Count -gt 0) {
+    Write-Warning ("Portable CUDA runtime was not fully added from runtime\cuda: " + ($MissingCuda -join ", "))
     Write-Warning "The packaged app still supports CPU and a compatible system CUDA installation."
 }
 else {
