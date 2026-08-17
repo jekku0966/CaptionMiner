@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Moved 100% completion to after the SRT has been written instead of reporting completion while finalization was still underway.
 - Recovered clearly audible dialogue that Whisper skipped solely because the exported clip placed it unfavorably inside a whole-file decoding window.
 - Allowed a quality profile to recover from an empty primary pass before raising `no speech was detected`.
+- Ignored malformed or non-finite model word timestamps instead of aborting the entire transcription.
 
 ### Changed
 
@@ -28,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Retained `large-v3` as an explicitly Experimental profile for continued comparison instead of presenting it as the dependable quality-first option.
 - Reserved the final portion of quality-profile progress for visible recovery work instead of presenting the first recognition pass as the entire transcription.
 - Corrected the model comparison documentation after manual review found missing dialogue in the initially successful `large-v2` output.
+- Removed repeated full-timeline sorting while merging recovered words; merged output is now sorted once after deduplication.
 
 ### Planned
 

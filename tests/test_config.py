@@ -37,3 +37,27 @@ def test_invalid_device_is_rejected(device: str) -> None:
 def test_recovery_overlap_must_be_smaller_than_its_window() -> None:
     with pytest.raises(ValueError):
         TranscriptionOptions(recovery_window_seconds=10.0, recovery_overlap_seconds=10.0)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    (
+        pytest.param({"recovery_gap_seconds": 0.9}, id="gap-below-minimum"),
+        pytest.param({"recovery_gap_seconds": 30.1}, id="gap-above-maximum"),
+        pytest.param({"recovery_window_seconds": 4.9}, id="window-below-minimum"),
+        pytest.param({"recovery_window_seconds": 30.1}, id="window-above-maximum"),
+        pytest.param({"recovery_overlap_seconds": -0.1}, id="negative-overlap"),
+        pytest.param({"recovery_context_seconds": -0.1}, id="negative-context"),
+        pytest.param(
+            {"recovery_window_seconds": 10.0, "recovery_context_seconds": 10.0},
+            id="context-equals-window",
+        ),
+        pytest.param(
+            {"recovery_window_seconds": 10.0, "recovery_context_seconds": 11.0},
+            id="context-exceeds-window",
+        ),
+    ),
+)
+def test_invalid_recovery_configuration_is_rejected(kwargs: dict[str, float]) -> None:
+    with pytest.raises(ValueError):
+        TranscriptionOptions(**kwargs)

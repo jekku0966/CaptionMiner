@@ -54,15 +54,26 @@ def _cancelled(check: CancelCheck | None) -> bool:
     return bool(check and check())
 
 
+def _safe_float(value: Any) -> float | None:
+    try:
+        parsed = float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed is not None and math.isfinite(parsed) else None
+
+
 def _word_from_model(value: Any) -> WordTimestamp | None:
     start = getattr(value, "start", None)
     end = getattr(value, "end", None)
-    text = str(getattr(value, "word", ""))
-    if start is None or end is None or not text.strip():
+    raw_text = getattr(value, "word", "")
+    if start is None or end is None or raw_text is None:
         return None
-    parsed_start = float(start)
-    parsed_end = float(end)
-    if not math.isfinite(parsed_start) or not math.isfinite(parsed_end):
+    text = str(raw_text)
+    if not text.strip():
+        return None
+    parsed_start = _safe_float(start)
+    parsed_end = _safe_float(end)
+    if parsed_start is None or parsed_end is None:
         return None
     parsed_start = max(0.0, parsed_start)
     parsed_end = max(parsed_start, parsed_end)
@@ -176,7 +187,6 @@ def _merge_word_timelines(
         )
         if duplicate_index is None:
             merged.append(candidate)
-            merged.sort(key=lambda word: (word.start, word.end))
             continue
 
         if merged[duplicate_index] in primary_words:
@@ -490,10 +500,3 @@ class TranscriptionEngine:
         )
         _notify(progress, 0.99, f"Preparing {len(cues)} subtitle cues for {source.name}...")
         return TranscriptionResult(source=source, cues=tuple(cues), metadata=metadata)
-
-
-def _safe_float(value: Any) -> float | None:
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None

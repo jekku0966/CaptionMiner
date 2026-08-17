@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import sys
 import types
 
@@ -14,6 +15,7 @@ from captionminer.transcribe import (
     _find_recovery_gaps,
     _looks_like_cuda_failure,
     _merge_word_timelines,
+    _word_from_model,
     resolve_runtime,
 )
 
@@ -117,6 +119,33 @@ def test_zero_or_unknown_duration_keeps_transcription_progress_indeterminate(
         (None, f"Transcribing {source.name}..."),
     ]
     assert not any(" / " in message for _, message in transcription_events)
+
+
+def test_primary_pass_does_not_trigger_gap_recovery_when_disabled(tmp_path) -> None:
+    source = tmp_path / "clip.wav"
+    source.touch()
+    info = types.SimpleNamespace(duration=12.0, language="en", language_probability=0.99)
+    word = types.SimpleNamespace(start=5.0, end=5.5, word=" Primary.", probability=0.8)
+    segment = types.SimpleNamespace(start=5.0, end=5.5, text=" Primary.", words=[word])
+    calls: list[dict] = []
+
+    def transcribe(_source: str, **kwargs):
+        calls.append(kwargs)
+        return iter([segment]), info
+
+    events: list[tuple[float | None, str]] = []
+    engine = TranscriptionEngine(TranscriptionOptions(device="cpu", recover_gaps=False))
+    result = engine._transcribe_once(
+        types.SimpleNamespace(transcribe=transcribe),
+        source,
+        progress=lambda fraction, message: events.append((fraction, message)),
+        cancel=None,
+    )
+
+    assert len(calls) == 1
+    assert "clip_timestamps" not in calls[0]
+    assert result.metadata.recovered_word_count == 0
+    assert not any("recover" in message.casefold() for _, message in events)
 
 
 def test_gap_recovery_adds_focused_words_without_replacing_primary_words(tmp_path) -> None:
@@ -278,6 +307,62 @@ def test_gap_detection_and_overlapping_recovery_windows_cover_long_omissions() -
     ]
 
 
+def test_gap_detection_ignores_short_gaps_below_threshold() -> None:
+    words = [
+        WordTimestamp(0.0, 1.0, " A."),
+        WordTimestamp(3.0, 4.0, " B."),
+    ]
+    gaps = _find_recovery_gaps(words, duration=4.0, minimum_seconds=3.0)
+    windows = _build_recovery_windows(
+        gaps,
+        duration=4.0,
+        window_seconds=5.0,
+        overlap_seconds=1.0,
+        context_seconds=1.0,
+    )
+
+    assert gaps == []
+    assert windows == []
+
+
+def test_gap_detection_and_windows_cover_multiple_long_gaps() -> None:
+    words = [
+        WordTimestamp(0.0, 1.0, " First."),
+        WordTimestamp(10.0, 11.0, " Second."),
+        WordTimestamp(30.0, 31.0, " Third."),
+    ]
+    gaps = _find_recovery_gaps(words, duration=31.0, minimum_seconds=3.0)
+    windows = _build_recovery_windows(
+        gaps,
+        duration=31.0,
+        window_seconds=10.0,
+        overlap_seconds=2.0,
+        context_seconds=2.0,
+    )
+
+    assert gaps == [(1.0, 10.0), (11.0, 30.0)]
+    assert [(window.start, window.end) for window in windows] == [
+        (1.0, 11.0),
+        (11.0, 21.0),
+        (19.0, 29.0),
+        (27.0, 31.0),
+    ]
+
+
+def test_empty_timeline_below_gap_threshold_produces_no_windows() -> None:
+    gaps = _find_recovery_gaps([], duration=5.0, minimum_seconds=10.0)
+    windows = _build_recovery_windows(
+        gaps,
+        duration=5.0,
+        window_seconds=5.0,
+        overlap_seconds=1.0,
+        context_seconds=1.0,
+    )
+
+    assert gaps == []
+    assert windows == []
+
+
 def test_word_merge_keeps_primary_and_prefers_confident_recovery_duplicates() -> None:
     primary = [WordTimestamp(0.0, 0.4, " Primary.", probability=0.1)]
     recovered = [
@@ -291,3 +376,97 @@ def test_word_merge_keeps_primary_and_prefers_confident_recovery_duplicates() ->
 
     assert [word.text for word in merged] == [" Primary.", " Missing", " Missing"]
     assert merged[1].probability == 0.9
+
+
+@pytest.mark.parametrize(
+    "model_word",
+    (
+        pytest.param(types.SimpleNamespace(end=0.1, word=" hello"), id="missing-start"),
+        pytest.param(types.SimpleNamespace(start=0.0, word=" hello"), id="missing-end"),
+        pytest.param(
+            types.SimpleNamespace(start=0.0, end=0.1),
+            id="missing-text",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=0.0, end=0.1, word="   "),
+            id="blank-text",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=0.0, end=0.1, word=None),
+            id="none-text",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start="not-a-time", end=0.1, word=" hello"),
+            id="nonnumeric-start",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=0.0, end=object(), word=" hello"),
+            id="nonnumeric-end",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=math.nan, end=0.1, word=" hello"),
+            id="nan-start",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=0.0, end=math.nan, word=" hello"),
+            id="nan-end",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=math.inf, end=0.1, word=" hello"),
+            id="infinite-start",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=0.0, end=math.inf, word=" hello"),
+            id="infinite-end",
+        ),
+    ),
+)
+def test_word_from_model_rejects_malformed_metadata(model_word: types.SimpleNamespace) -> None:
+    assert _word_from_model(model_word) is None
+
+
+@pytest.mark.parametrize(
+    ("model_word", "expected"),
+    (
+        pytest.param(
+            types.SimpleNamespace(start=1.23, end=2.34, word=" hello", probability=0.87),
+            WordTimestamp(1.23, 2.34, " hello", probability=0.87),
+            id="complete",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=-0.1, end=0.1, word=" hello"),
+            WordTimestamp(0.0, 0.1, " hello"),
+            id="negative-start-clamped",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=0.2, end=0.1, word=" hello", probability=None),
+            WordTimestamp(0.2, 0.2, " hello"),
+            id="end-clamped-to-start",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=0.5, end=1.0, word=" world"),
+            WordTimestamp(0.5, 1.0, " world"),
+            id="missing-probability",
+        ),
+        pytest.param(
+            types.SimpleNamespace(
+                start=0.5,
+                end=1.0,
+                word=" world",
+                probability="not-a-probability",
+            ),
+            WordTimestamp(0.5, 1.0, " world"),
+            id="invalid-probability",
+        ),
+        pytest.param(
+            types.SimpleNamespace(start=0.5, end=1.0, word=" world", probability=math.nan),
+            WordTimestamp(0.5, 1.0, " world"),
+            id="nonfinite-probability",
+        ),
+    ),
+)
+def test_word_from_model_normalizes_valid_metadata(
+    model_word: types.SimpleNamespace,
+    expected: WordTimestamp,
+) -> None:
+    assert _word_from_model(model_word) == expected
