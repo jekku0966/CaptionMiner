@@ -76,14 +76,16 @@ def test_zero_or_unknown_duration_keeps_transcription_progress_indeterminate(tmp
     )
     for info in info_values:
         model = types.SimpleNamespace(
-            transcribe=lambda *_args, **_kwargs: (iter([segment]), info)
+            transcribe=lambda *_args, _info=info, **_kwargs: (iter([segment]), _info)
         )
         events: list[tuple[float | None, str]] = []
 
         engine._transcribe_once(
             model,
             source,
-            progress=lambda fraction, message: events.append((fraction, message)),
+            progress=lambda fraction, message, _events=events: _events.append(
+                (fraction, message)
+            ),
             cancel=None,
         )
 
