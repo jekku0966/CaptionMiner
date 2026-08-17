@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 import types
 
+import pytest
+
 from captionminer.config import options_for_profile
 from captionminer.transcribe import (
     TranscriptionEngine,
@@ -45,7 +47,11 @@ def test_transcription_is_indeterminate_until_a_timed_segment_arrives(tmp_path) 
     word = types.SimpleNamespace(start=0.1, end=1.8, word=" Progress.")
     segment = types.SimpleNamespace(start=0.0, end=2.0, text=" Progress.", words=[word])
     info = types.SimpleNamespace(duration=4.0, language="en", language_probability=0.99)
-    model = types.SimpleNamespace(transcribe=lambda *_args, **_kwargs: (iter([segment]), info))
+
+    def transcribe(_source: str, **_kwargs):
+        return iter([segment]), info
+
+    model = types.SimpleNamespace(transcribe=transcribe)
     events: list[tuple[float | None, str]] = []
     engine = TranscriptionEngine(options_for_profile("fast", device="cpu"))
 
@@ -63,37 +69,46 @@ def test_transcription_is_indeterminate_until_a_timed_segment_arrives(tmp_path) 
     assert result.cues[0].text == "Progress."
 
 
-def test_zero_or_unknown_duration_keeps_transcription_progress_indeterminate(tmp_path) -> None:
+@pytest.mark.parametrize(
+    "info",
+    (
+        pytest.param(
+            types.SimpleNamespace(duration=0.0, language="en", language_probability=0.99),
+            id="zero-duration",
+        ),
+        pytest.param(
+            types.SimpleNamespace(language="en", language_probability=0.99),
+            id="missing-duration",
+        ),
+    ),
+)
+def test_zero_or_unknown_duration_keeps_transcription_progress_indeterminate(
+    tmp_path, info: types.SimpleNamespace
+) -> None:
     source = tmp_path / "clip.wav"
     source.touch()
     word = types.SimpleNamespace(start=0.1, end=1.8, word=" Progress.")
     segment = types.SimpleNamespace(start=0.0, end=2.0, text=" Progress.", words=[word])
     engine = TranscriptionEngine(options_for_profile("fast", device="cpu"))
 
-    info_values = (
-        types.SimpleNamespace(duration=0.0, language="en", language_probability=0.99),
-        types.SimpleNamespace(language="en", language_probability=0.99),
+    def transcribe(_source: str, **_kwargs):
+        return iter([segment]), info
+
+    model = types.SimpleNamespace(transcribe=transcribe)
+    events: list[tuple[float | None, str]] = []
+
+    engine._transcribe_once(
+        model,
+        source,
+        progress=lambda fraction, message: events.append((fraction, message)),
+        cancel=None,
     )
-    for info in info_values:
-        model = types.SimpleNamespace(
-            transcribe=lambda *_args, _info=info, **_kwargs: (iter([segment]), _info)
-        )
-        events: list[tuple[float | None, str]] = []
 
-        engine._transcribe_once(
-            model,
-            source,
-            progress=lambda fraction, message, _events=events: _events.append(
-                (fraction, message)
-            ),
-            cancel=None,
-        )
-
-        transcription_events = [
-            event for event in events if event[1].startswith(f"Transcribing {source.name}")
-        ]
-        assert transcription_events == [
-            (None, f"Transcribing {source.name}; waiting for timed speech..."),
-            (None, f"Transcribing {source.name}..."),
-        ]
-        assert not any(" / " in message for _, message in transcription_events)
+    transcription_events = [
+        event for event in events if event[1].startswith(f"Transcribing {source.name}")
+    ]
+    assert transcription_events == [
+        (None, f"Transcribing {source.name}; waiting for timed speech..."),
+        (None, f"Transcribing {source.name}..."),
+    ]
+    assert not any(" / " in message for _, message in transcription_events)
