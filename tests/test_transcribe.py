@@ -61,3 +61,39 @@ def test_transcription_is_indeterminate_until_a_timed_segment_arrives(tmp_path) 
     assert events[2][0] == 0.5
     assert events[-1][0] == 0.99
     assert result.cues[0].text == "Progress."
+
+
+def test_zero_or_unknown_duration_keeps_transcription_progress_indeterminate(tmp_path) -> None:
+    source = tmp_path / "clip.wav"
+    source.touch()
+    word = types.SimpleNamespace(start=0.1, end=1.8, word=" Progress.")
+    segment = types.SimpleNamespace(start=0.0, end=2.0, text=" Progress.", words=[word])
+    engine = TranscriptionEngine(options_for_profile("fast", device="cpu"))
+
+    info_values = (
+        types.SimpleNamespace(duration=0.0, language="en", language_probability=0.99),
+        types.SimpleNamespace(language="en", language_probability=0.99),
+    )
+    for info in info_values:
+        model = types.SimpleNamespace(
+            transcribe=lambda *_args, _info=info, **_kwargs: (iter([segment]), _info)
+        )
+        events: list[tuple[float | None, str]] = []
+
+        engine._transcribe_once(
+            model,
+            source,
+            progress=lambda fraction, message, _events=events: _events.append(
+                (fraction, message)
+            ),
+            cancel=None,
+        )
+
+        transcription_events = [
+            event for event in events if event[1].startswith(f"Transcribing {source.name}")
+        ]
+        assert transcription_events == [
+            (None, f"Transcribing {source.name}; waiting for timed speech..."),
+            (None, f"Transcribing {source.name}..."),
+        ]
+        assert not any(" / " in message for _, message in transcription_events)
