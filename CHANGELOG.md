@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Replaced the misleading stationary 0% state during model loading, media analysis, and pre-segment transcription with an animated busy indicator.
 - Moved 100% completion to after the SRT has been written instead of reporting completion while finalization was still underway.
 
+### Changed
+
+- Changed the Accurate profile from `large-v3` to `large-v2` after a reproducible 70-second clip produced 15 cues with `large-v2` but no usable speech with `large-v3`, including with VAD disabled.
+- Retained `large-v3` as an explicitly Experimental profile for continued comparison instead of presenting it as the dependable quality-first option.
+
 ### Planned
 
 - Validate real exported clips across current Resolve, Premiere Pro, and CapCut Desktop releases.
