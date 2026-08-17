@@ -224,19 +224,34 @@ This is different from HighlightMiner's broader analysis/export pipeline, which 
 
 ## Model profiles
 
-The GUI exposes three understandable profiles instead of demanding that every user memorize model checkpoint names:
+The GUI exposes four understandable profiles instead of demanding that every user memorize model checkpoint names:
 
 | Profile | faster-whisper model | Intended use |
 |---|---|---|
 | Fast | `small` | Quick drafts and machines with limited resources. |
 | Balanced | `medium` | Default general-purpose option. |
-| Accurate | `large-v3` | Best included accuracy profile; more download, memory, and startup time. |
+| Accurate | `large-v2` | Quality-first option validated on short exported clips; more download, memory, and startup time. |
+| Experimental | `large-v3` | Available for comparison and broader testing; not recommended for dependable clip transcription yet. |
 
 The CLI also permits an advanced `--model` override for another faster-whisper model name or a compatible local model directory.
 
 Model selection is a quality/performance tradeoff, not a promise. Audio quality, accent, overlapping speakers, music, noise, vocabulary, and language can matter more than moving up one model size.
 
-For an RTX 3090, **Accurate / `large-v3`** is the sensible quality-first choice. The model is loaded once and reused when multiple clips are submitted in the same batch.
+For an RTX 3090, **Accurate / `large-v2`** is the current quality-first choice. The model is loaded once and reused when multiple clips are submitted in the same batch.
+
+### Why `large-v3` is experimental
+
+Initial field testing found a reproducible model-specific failure on a 70-second HighlightMiner export containing clearly audible English dialogue:
+
+| Model | Result on the same clip |
+|---|---|
+| `medium` | 12 cues / 76 words |
+| `large-v2` | 15 cues / 83 words |
+| `large-v3` | No usable speech / zero cues |
+
+The source was a valid 48 kHz stereo AAC track. `large-v3` still returned no usable speech with automatic language detection and with VAD disabled, while `large-v2` transcribed the same media successfully on CUDA FP16. That isolates the observed failure to `large-v3` decoding behavior for this workload rather than CaptionMiner's SRT writer, language selection, VAD, CUDA, or the media file itself.
+
+This is one reproducible field case, not a claim that `large-v3` fails on every recording. It remains available under **Experimental** and through `--model large-v3` so more clips can be tested without presenting it as the dependable accuracy choice.
 
 ---
 
@@ -453,12 +468,14 @@ Result: looks good
 .\.venv\Scripts\python.exe -m captionminer transcribe "D:\Clips\clip.mp4" --overwrite
 ```
 
-### Advanced model override
+### Run the experimental large-v3 profile
 
 ```powershell
 .\.venv\Scripts\python.exe -m captionminer transcribe "D:\Clips\clip.mp4" `
-  --model large-v3
+  --profile experimental
 ```
+
+The advanced `--model` option remains available for another faster-whisper model name or a compatible local model directory.
 
 Run full CLI help:
 
@@ -532,7 +549,7 @@ No fixed speed number is promised for v0.1 because no standardized CaptionMiner 
 
 ## First-run model download and offline use
 
-When a model name such as `medium` or `large-v3` is loaded for the first time, faster-whisper downloads the compatible model from Hugging Face Hub into the user's model cache. CaptionMiner does not host or proxy these model files.
+When a model name such as `medium`, `large-v2`, or experimental `large-v3` is loaded for the first time, faster-whisper downloads the compatible model from Hugging Face Hub into the user's model cache. CaptionMiner does not host or proxy these model files.
 
 After the model is cached, transcription itself can run without uploading the source media. A future cache cleanup, profile change, new Windows account, or fresh machine can require another download.
 
@@ -910,7 +927,7 @@ Yes, using CPU INT8 inference. Larger models can be slow on CPU.
 
 ### Why is `large-v3` not the default?
 
-Balanced / `medium` is safer across a broad range of machines. On an RTX 3090, choosing Accurate / `large-v3` is reasonable.
+Balanced / `medium` remains the safest general default. Accurate now uses `large-v2`, which successfully transcribed the real short export where `large-v3` returned no speech even without VAD. `large-v3` remains available as Experimental because one reproducible failure justifies a warning, not pretending the model has ceased to exist.
 
 ### Can it process an entire VOD?
 
