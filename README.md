@@ -98,6 +98,7 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 - **NVIDIA GPU support** — CTranslate2 uses CUDA when available.
 - **Automatic CPU fallback** — Automatic mode retries on CPU when CUDA initialization fails.
 - **Batch processing** — drag in multiple exported clips and reuse one loaded model across the batch.
+- **Honest progress reporting** — unmeasurable phases animate instead of pretending to be stuck at 0%, followed by timestamp-based batch progress and elapsed time.
 - **Word-level timestamps** — subtitle boundaries are derived from recognized word timing.
 - **Voice activity detection** — Silero VAD filters longer non-speech regions by default.
 - **Natural cue boundaries** — punctuation, pauses, duration, and a generous text cap prevent uncontrolled subtitle blocks.
@@ -352,6 +353,16 @@ clip_3.srt
 
 Enable overwrite only when replacing the exact same-named SRT is intended.
 
+### Progress reporting
+
+CaptionMiner distinguishes between work that can and cannot be measured:
+
+- **Model loading, media analysis, and waiting for Whisper's first timed segment:** the progress bar uses an animated busy state because faster-whisper does not expose a trustworthy percentage for these phases.
+- **Timed transcription:** the bar switches to a numeric batch percentage derived from the end timestamp of each returned Whisper segment and the source duration.
+- **Finalization:** the status reports cue preparation, SRT writing, and completion.
+
+The status line always includes elapsed time while a batch is running. CaptionMiner deliberately does not invent an ETA from insufficient data. Short clips may produce only one or two numeric updates after the busy phase because Whisper returns completed segments rather than a continuous stream of decoder progress.
+
 ### Cancellation
 
 Cancellation is checked while Whisper segments are consumed and between files. Model download/loading and a currently executing low-level inference operation may not stop immediately. No final SRT is written until the transcription completes.
@@ -600,7 +611,9 @@ Automatic mode can fall back to CPU. Explicit CUDA deliberately exposes the erro
 
 ### The first transcription appears stuck on model loading
 
-The model may be downloading. The current GUI receives control again only after the model constructor returns, so first-run download progress is not yet granular. Check network activity and the terminal/PowerShell output when diagnosing.
+The model may be downloading. CaptionMiner displays an animated busy bar and elapsed time during model loading, but faster-whisper does not expose byte-level model-download progress to the application. Check network activity and the terminal/PowerShell output when diagnosing an unusually long first run.
+
+If the status says that CaptionMiner is waiting for timed speech, Whisper is processing but has not returned its first complete segment yet. Once it does, the bar switches from the animated busy state to timestamp-based percentage progress. A very short clip can still jump from the busy state to a high percentage because there may be only one recognized segment.
 
 ### No speech detected
 
@@ -662,11 +675,14 @@ CaptionMiner/
 │   ├── models.py
 │   ├── output.py
 │   ├── pipeline.py
+│   ├── progress.py
 │   ├── subtitles.py
 │   └── transcribe.py
 ├── tests/
 │   ├── test_config.py
 │   ├── test_output.py
+│   ├── test_pipeline.py
+│   ├── test_progress.py
 │   ├── test_subtitles.py
 │   └── test_transcribe.py
 ├── ATTRIBUTIONS.md
@@ -738,6 +754,10 @@ The initial suite verifies:
 - configuration validation
 - CUDA/CPU auto-selection helpers
 - narrow CUDA-failure classification
+- indeterminate-to-measured progress transitions
+- batch progress scaling and value bounds
+- elapsed-time formatting
+- completion reporting only after the SRT exists
 
 Tests do not prove recognition accuracy. That requires a versioned media corpus with known reference transcripts, which is a later validation project.
 
@@ -814,6 +834,7 @@ See [`SECURITY.md`](SECURITY.md).
 - The custom vocabulary prompt is advisory rather than deterministic.
 - Automatic language detection can choose the wrong language on very short clips.
 - The first model load can be slow or fail behind a restricted network.
+- A trustworthy percentage is unavailable until Whisper returns its first timed segment; CaptionMiner shows an animated busy state instead.
 - CUDA availability depends on external driver/runtime compatibility.
 - Cancellation cannot instantly interrupt every model-download or inference call.
 - No speaker diarization is performed.
@@ -838,7 +859,7 @@ The correct expectation is **a strong local first-pass transcript that saves typ
 ### v0.2 — packaging and workflow polish
 
 - Produce a repeatable Windows application build.
-- Improve first-run model download visibility.
+- Add byte-level first-run model download progress if the upstream model-loading API exposes it reliably.
 - Persist safe GUI preferences.
 - Add optional watch-folder/batch automation if real usage justifies it.
 
