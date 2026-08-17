@@ -125,9 +125,14 @@ class BatchWorker(QObject):
                 )
                 completed += 1
                 language = result.metadata.language or "unknown language"
+                recovery = (
+                    f", recovered {result.metadata.recovered_word_count} word(s)"
+                    if result.metadata.recovered_word_count
+                    else ""
+                )
                 self.log.emit(
                     f"Created {result.output} ({result.cue_count} cues, {language}, "
-                    f"{result.metadata.device})."
+                    f"{result.metadata.device}{recovery})."
                 )
             except TranscriptionCancelled:
                 self.log.emit("Cancellation requested; no partial SRT was written.")

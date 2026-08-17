@@ -11,6 +11,7 @@ class ModelProfile:
     label: str
     model_name: str
     description: str
+    recover_gaps: bool = False
 
 
 MODEL_PROFILES: dict[str, ModelProfile] = {
@@ -30,13 +31,15 @@ MODEL_PROFILES: dict[str, ModelProfile] = {
         key="accurate",
         label="Accurate",
         model_name="large-v2",
-        description="Quality-first profile validated on short exported clips.",
+        description="Quality-first profile with focused recovery of possible missing speech.",
+        recover_gaps=True,
     ),
     "experimental": ModelProfile(
         key="experimental",
         label="Experimental",
         model_name="large-v3",
         description="Testing-only profile; can reject valid speech in short mixed-audio clips.",
+        recover_gaps=True,
     ),
 }
 
@@ -77,6 +80,11 @@ class TranscriptionOptions:
     max_characters_per_cue: int = 84
     max_cue_duration_seconds: float = 7.0
     pause_boundary_seconds: float = 0.60
+    recover_gaps: bool = False
+    recovery_gap_seconds: float = 3.0
+    recovery_window_seconds: float = 18.0
+    recovery_overlap_seconds: float = 6.0
+    recovery_context_seconds: float = 3.0
 
     def __post_init__(self) -> None:
         if self.device not in {"auto", "cuda", "cpu"}:
@@ -89,6 +97,14 @@ class TranscriptionOptions:
             raise ValueError("max_cue_duration_seconds must be between 1 and 30")
         if not 0.0 <= self.pause_boundary_seconds <= 10.0:
             raise ValueError("pause_boundary_seconds must be between 0 and 10")
+        if not 1.0 <= self.recovery_gap_seconds <= 30.0:
+            raise ValueError("recovery_gap_seconds must be between 1 and 30")
+        if not 5.0 <= self.recovery_window_seconds <= 30.0:
+            raise ValueError("recovery_window_seconds must be between 5 and 30")
+        if not 0.0 <= self.recovery_overlap_seconds < self.recovery_window_seconds:
+            raise ValueError("recovery_overlap_seconds must be smaller than the recovery window")
+        if not 0.0 <= self.recovery_context_seconds < self.recovery_window_seconds:
+            raise ValueError("recovery_context_seconds must be smaller than the recovery window")
         if self.language is not None:
             normalized = self.language.strip().lower()
             object.__setattr__(self, "language", normalized or None)
@@ -119,4 +135,5 @@ def options_for_profile(
         device=device,
         initial_prompt=initial_prompt,
         max_characters_per_cue=max_characters_per_cue,
+        recover_gaps=selected.recover_gaps,
     )

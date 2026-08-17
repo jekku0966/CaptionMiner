@@ -100,6 +100,7 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 - **Batch processing** — drag in multiple exported clips and reuse one loaded model across the batch.
 - **Honest progress reporting** — unmeasurable phases animate instead of pretending to be stuck at 0%, followed by timestamp-based batch progress and elapsed time.
 - **Word-level timestamps** — subtitle boundaries are derived from recognized word timing.
+- **Focused gap recovery** — quality profiles independently retry suspicious transcript gaps and merge newly recovered words without replacing the primary timeline.
 - **Voice activity detection** — Silero VAD filters longer non-speech regions by default.
 - **Natural cue boundaries** — punctuation, pauses, duration, and a generous text cap prevent uncontrolled subtitle blocks.
 - **No forced visual wrapping** — cue text contains no line breaks inserted for presentation.
@@ -149,10 +150,10 @@ Those omissions are intentional. CaptionMiner is a media-to-SRT converter, not a
 flowchart TD
     A[Local video or audio] --> B[PyAV media decode]
     B --> C[faster-whisper transcription]
-    C --> D[Word timestamps]
-    C --> E[Detected language]
-    D --> F[Cue boundary builder]
-    F --> G[Non-overlap validation]
+    C --> D[Primary word timeline]
+    D --> E[Optional focused gap recovery]
+    E --> F[Merge and deduplicate]
+    F --> G[Cue boundary builder]
     G --> H[Plain UTF-8 SRT]
 ```
 
@@ -167,6 +168,17 @@ CaptionMiner uses [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper),
 - Silero voice activity detection
 
 Whisper returns segment and word timing relative to the beginning of the supplied media file.
+
+For the Accurate and Experimental profiles, CaptionMiner then looks for transcript gaps of at least three seconds. Each gap is decoded again in short, independently conditioned windows. Only recovered words whose timestamps fall inside the original gap are considered. Primary words take precedence, overlapping recovery results are deduplicated, and the final merged timeline is passed to the normal cue builder. This is recognition recovery, not subtitle styling.
+
+| Recovery setting | Default | Purpose |
+|---|---:|---|
+| Minimum suspicious gap | 3 seconds | Avoid retrying ordinary pauses between nearby words. |
+| Focused window | 18 seconds | Shift speech away from the original 30-second decoding context. |
+| Long-gap overlap | 6 seconds | Prevent a long omission from falling only on another window boundary. |
+| Following context | Up to 3 seconds | Give a short gap enough later audio for coherent decoding. |
+
+Focused passes disable VAD and previous-text conditioning, preserve the language selected or detected by the primary pass, and retain faster-whisper's normal decoder-quality safeguards. Recovery windows never modify the source media.
 
 ### Cue construction
 
@@ -230,28 +242,30 @@ The GUI exposes four understandable profiles instead of demanding that every use
 |---|---|---|
 | Fast | `small` | Quick drafts and machines with limited resources. |
 | Balanced | `medium` | Default general-purpose option. |
-| Accurate | `large-v2` | Quality-first option validated on short exported clips; more download, memory, and startup time. |
-| Experimental | `large-v3` | Available for comparison and broader testing; not recommended for dependable clip transcription yet. |
+| Accurate | `large-v2` | Quality-first option with focused gap recovery; slower than a single pass. |
+| Experimental | `large-v3` | Gap recovery plus a model that still needs broader validation on exported clips. |
 
 The CLI also permits an advanced `--model` override for another faster-whisper model name or a compatible local model directory.
 
 Model selection is a quality/performance tradeoff, not a promise. Audio quality, accent, overlapping speakers, music, noise, vocabulary, and language can matter more than moving up one model size.
 
-For an RTX 3090, **Accurate / `large-v2`** is the current quality-first choice. The model is loaded once and reused when multiple clips are submitted in the same batch.
+For an RTX 3090, **Accurate / `large-v2`** is the current quality-first choice. The model is loaded once and reused when multiple clips are submitted in the same batch. Balanced remains the sensible choice when turnaround time matters more than retrying possible omissions.
 
-### Why `large-v3` is experimental
+### Why gap recovery exists and `large-v3` remains experimental
 
-Initial field testing found a reproducible model-specific failure on a 70-second HighlightMiner export containing clearly audible English dialogue:
+Initial field testing used a reproducible 70-second HighlightMiner export containing clearly audible English dialogue. The first whole-clip passes produced:
 
-| Model | Result on the same clip |
+| Model | Initial whole-clip result |
 |---|---|
 | `medium` | 12 cues / 76 words |
-| `large-v2` | 15 cues / 83 words |
+| `large-v2` | 15 cues / 83 words, but manual review found missing dialogue |
 | `large-v3` | No usable speech / zero cues |
 
-The source was a valid 48 kHz stereo AAC track. `large-v3` still returned no usable speech with automatic language detection and with VAD disabled, while `large-v2` transcribed the same media successfully on CUDA FP16. That isolates the observed failure to `large-v3` decoding behavior for this workload rather than CaptionMiner's SRT writer, language selection, VAD, CUDA, or the media file itself.
+The omitted `large-v2` section contained short reactions and repeated shouted instructions. Disabling Silero VAD, disabling word timestamps, disabling Whisper's decoder rejection thresholds, and disabling previous-text conditioning did not restore it in the whole-clip pass. Decoding the suspicious interval independently did: a focused `11s-29s` pass recovered `EW! EW! SHOOT HIM!...` with individual word timestamps from `17.320s` through `22.920s`.
 
-This is one reproducible field case, not a claim that `large-v3` fails on every recording. It remains available under **Experimental** and through `--model large-v3` so more clips can be tested without presenting it as the dependable accuracy choice.
+That demonstrates a decoding-window/context failure rather than an SRT-writing failure. CaptionMiner now uses focused recovery windows in the quality profiles and merges their words into gaps left by the primary timeline. The primary transcript is preserved, so a recovery window that omits an already recognized phrase cannot erase it.
+
+This remains one reproducible field case, not proof that every omission can be recovered or that `large-v3` fails on every recording. `large-v3` retains the same recovery machinery but remains **Experimental** until broader real-clip testing shows that it can reliably produce a usable primary or recovered transcript.
 
 ---
 
@@ -323,7 +337,7 @@ The **All files** option remains available because actual decoding support is de
 
 ### Accuracy profile
 
-Selects the model described in [Model profiles](#model-profiles). The first use downloads that model. Model loading can dominate processing time for a very short clip.
+Selects the model and recovery behavior described in [Model profiles](#model-profiles). The first use downloads that model. Model loading can dominate processing time for a very short clip. Accurate and Experimental can perform additional focused inference after the primary pass; this is expected rather than the progress bar developing trust issues again.
 
 ### Spoken language
 
@@ -374,6 +388,7 @@ CaptionMiner distinguishes between work that can and cannot be measured:
 
 - **Model loading, media analysis, and waiting for Whisper's first timed segment:** the progress bar uses an animated busy state because faster-whisper does not expose a trustworthy percentage for these phases.
 - **Timed transcription:** the bar switches to a numeric batch percentage derived from the end timestamp of each returned Whisper segment and the source duration.
+- **Focused recovery:** Accurate and Experimental reserve the final portion of transcription progress for independently checking suspicious gaps. The status shows each recovery window and the completion log reports how many words were added.
 - **Finalization:** the status reports cue preparation, SRT writing, and completion.
 
 The status line always includes elapsed time while a batch is running. CaptionMiner deliberately does not invent an ETA from insufficient data. Short clips may produce only one or two numeric updates after the busy phase because Whisper returns completed segments rather than a continuous stream of decoder progress.
@@ -536,12 +551,13 @@ Runtime depends on:
 - model loading time
 - clip duration
 - amount of speech
+- number and length of transcript gaps selected for focused recovery
 - language
 - beam size
 - storage speed
 - audio complexity and noise
 
-A short exported clip on a working NVIDIA setup will generally spend proportionally more time loading the model than decoding its speech. Batch clips together so CaptionMiner loads the model once.
+A short exported clip on a working NVIDIA setup will generally spend proportionally more time loading the model than decoding its speech. Batch clips together so CaptionMiner loads the model once. Accurate and Experimental intentionally trade additional inference time for a chance to recover speech skipped by the primary decoding windows; Balanced and Fast remain single-pass profiles.
 
 No fixed speed number is promised for v0.1 because no standardized CaptionMiner benchmark set has been published yet. If Automatic mode is unexpectedly slow, run `doctor` and check the completion log to confirm whether the job used `cuda` or `cpu`.
 
@@ -640,6 +656,8 @@ Confirm that:
 - the speech track is not muted or corrupt
 - the format can be decoded by PyAV
 - voice activity detection is not removing unusually quiet speech
+
+Accurate and Experimental automatically retry sufficiently large gaps, including the entire clip when the primary pass returns no words and the duration is known. If recovery also returns nothing, CaptionMiner reports the error instead of writing an empty SRT.
 
 The CLI can disable VAD for comparison:
 
@@ -775,8 +793,13 @@ The initial suite verifies:
 - batch progress scaling and value bounds
 - elapsed-time formatting
 - completion reporting only after the SRT exists
+- suspicious-gap detection and overlapping recovery-window construction
+- recovery of an otherwise empty primary transcription
+- focused-word filtering, confidence-based deduplication, and primary-word precedence
+- cancellation while recovery segments are being consumed
+- profile-specific single-pass versus gap-recovery behavior
 
-Tests do not prove recognition accuracy. That requires a versioned media corpus with known reference transcripts, which is a later validation project.
+The deterministic tests verify recovery orchestration with fake model output. They do not prove general recognition accuracy. The first real-clip investigation is documented above, but a versioned media corpus with reference transcripts is still required for meaningful accuracy measurement.
 
 ---
 
@@ -848,6 +871,8 @@ See [`SECURITY.md`](SECURITY.md).
 - Whisper can hallucinate text during noise, music, silence, or ambiguous speech.
 - Word timestamps are model estimates, not sample-accurate forced alignment.
 - Fast overlapping speech can produce merged or missing words.
+- Focused gap recovery is heuristic: it can recover window-dependent omissions, but it cannot guarantee every quiet, overlapped, or misrecognized word.
+- Recovery profiles perform additional inference and can take materially longer on sparse or difficult media.
 - The custom vocabulary prompt is advisory rather than deterministic.
 - Automatic language detection can choose the wrong language on very short clips.
 - The first model load can be slow or fail behind a restricted network.
@@ -927,7 +952,7 @@ Yes, using CPU INT8 inference. Larger models can be slow on CPU.
 
 ### Why is `large-v3` not the default?
 
-Balanced / `medium` remains the safest general default. Accurate now uses `large-v2`, which successfully transcribed the real short export where `large-v3` returned no speech even without VAD. `large-v3` remains available as Experimental because one reproducible failure justifies a warning, not pretending the model has ceased to exist.
+Balanced / `medium` remains the safest general default. Accurate uses `large-v2` plus focused gap recovery because manual review showed that a successful whole-clip pass could still omit clearly audible dialogue. `large-v3` remains available with the same recovery machinery under Experimental because its whole-clip pass returned no speech on the reproducible test clip. One clip justifies caution and better engineering, not a ceremonial model burning.
 
 ### Can it process an entire VOD?
 

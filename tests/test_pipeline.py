@@ -41,9 +41,9 @@ def test_media_to_srt_pipeline_with_fake_model(tmp_path: Path) -> None:
     assert result.cue_count == 1
     assert result.metadata.language == "en"
     assert result.metadata.device == "cpu"
+    assert result.metadata.recovered_word_count == 0
     assert result.output.read_text(encoding="utf-8") == (
         "1\n00:00:00,100 --> 00:00:00,800\nHello editor.\n"
     )
     assert events[-2] == (0.99, "Writing exported_clip.srt...", False)
     assert events[-1] == (1.0, "Created exported_clip.srt.", True)
-

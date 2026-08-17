@@ -13,6 +13,7 @@ class WordTimestamp:
     start: float
     end: float
     text: str
+    probability: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +53,7 @@ class TranscriptionMetadata:
     model_name: str
     device: str
     compute_type: str
+    recovered_word_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
