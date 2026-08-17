@@ -1,0 +1,33 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+*.spec
+
+# User media and generated subtitles should not be committed accidentally.
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.webm
+*.m4v
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.flac
+*.ogg
+*.opus
+*.srt
+
+# Local editor / OS state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

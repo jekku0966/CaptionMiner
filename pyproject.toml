@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "captionminer"
+version = "0.1.0"
+description = "Local media-to-SRT transcription for DaVinci Resolve, Adobe Premiere Pro, and CapCut."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "CaptionMiner contributors"}]
+keywords = ["subtitles", "srt", "whisper", "transcription", "video"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+  "Topic :: Multimedia :: Video",
+]
+dependencies = [
+  "faster-whisper>=1.2.0,<2",
+  "PySide6>=6.7,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<10",
+  "ruff>=0.9,<1",
+]
+build = [
+  "pyinstaller>=6.10,<7",
+]
+
+[project.scripts]
+captionminer = "captionminer.cli:main"
+
+[project.gui-scripts]
+captionminer-gui = "captionminer.gui:run_gui"
+
+[project.urls]
+Homepage = "https://github.com/jekku0966/CaptionMiner"
+Repository = "https://github.com/jekku0966/CaptionMiner"
+Issues = "https://github.com/jekku0966/CaptionMiner/issues"
+
+[tool.setuptools.packages.find]
+include = ["captionminer*"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
