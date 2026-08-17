@@ -1,4 +1,5 @@
 .venv/
+.build-venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -9,6 +10,7 @@ build/
 dist/
 *.egg-info/
 *.spec
+!CaptionMiner.spec
 
 # User media and generated subtitles should not be committed accidentally.
 *.mp4
@@ -25,6 +27,9 @@ dist/
 *.ogg
 *.opus
 *.srt
+
+# Portable runtime files are supplied locally and must not be redistributed by accident.
+*.dll
 
 # Local editor / OS state
 .idea/

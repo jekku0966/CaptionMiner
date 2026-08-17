@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Focused recovery windows for the Accurate and Experimental profiles, with word-level merging into suspicious primary-transcript gaps.
 - Completion metadata and CLI/GUI reporting for the number of words added by recovery.
 - Regression coverage for gap detection, overlapping windows, empty-primary rescue, deduplication, primary-word precedence, and cancellation during recovery.
+- Repeatable PyInstaller onedir packaging with a version-aware PowerShell builder and portable ZIP output.
+- GitHub Actions packaging that verifies frozen dependencies, smoke-tests the PySide6 GUI, and uploads a Windows x64 artifact.
+- A version-synchronization regression test for `pyproject.toml` and the runtime package version.
 
 ### Fixed
 
@@ -30,11 +33,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Reserved the final portion of quality-profile progress for visible recovery work instead of presenting the first recognition pass as the entire transcription.
 - Corrected the model comparison documentation after manual review found missing dialogue in the initially successful `large-v2` output.
 - Removed repeated full-timeline sorting while merging recovered words; merged output is now sorted once after deduplication.
+- Raised the PyInstaller build requirement to the packaging baseline used by HighlightMiner.
 
 ### Planned
 
 - Validate real exported clips across current Resolve, Premiere Pro, and CapCut Desktop releases.
-- Add a repeatable Windows application build after the Python workflow is proven.
+- Validate the portable Windows build on clean Windows hardware.
 - Integrate the reusable transcription core with HighlightMiner.
 
 ## [0.1.0] - 2026-08-17
