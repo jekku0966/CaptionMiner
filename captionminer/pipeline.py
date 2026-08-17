@@ -26,7 +26,11 @@ def transcribe_to_srt(
         output_directory=output_directory,
         overwrite=overwrite,
     )
+    if progress is not None:
+        progress(0.99, f"Writing {output.name}...")
     write_srt(output, result.cues)
+    if progress is not None:
+        progress(1.0, f"Created {output.name}.")
     return WrittenSubtitle(
         source=result.source,
         output=output,

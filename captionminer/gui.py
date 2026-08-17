@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot
+from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
 from captionminer import __version__
 from captionminer.config import COMMON_LANGUAGES, MODEL_PROFILES, options_for_profile
 from captionminer.pipeline import transcribe_to_srt
+from captionminer.progress import INDETERMINATE_PROGRESS, batch_progress_value, format_elapsed
 from captionminer.transcribe import TranscriptionCancelled, TranscriptionEngine
 
 
@@ -109,10 +111,8 @@ class BatchWorker(QObject):
             ) -> None:
                 if fraction is None:
                     self.log.emit(message)
-                    overall = round(current_index / total * 100)
-                else:
-                    overall = round((current_index + fraction) / total * 100)
-                self.progress.emit(overall, message)
+                overall = batch_progress_value(current_index, total, fraction)
+                self.progress.emit(overall, f"[{current_index + 1}/{total}] {message}")
 
             try:
                 result = transcribe_to_srt(
@@ -137,8 +137,9 @@ class BatchWorker(QObject):
                 self.log.emit(f"ERROR: {source.name}: {exc}")
 
         cancelled = self.cancel_event.is_set()
+        processed = completed + failed
         self.progress.emit(
-            100 if not cancelled else 0,
+            100 if not cancelled else round(processed / total * 100),
             "Finished" if not cancelled else "Cancelled",
         )
         self.completed.emit(completed, failed, cancelled)
@@ -156,6 +157,11 @@ class MainWindow(QMainWindow):
         self._thread: QThread | None = None
         self._worker: BatchWorker | None = None
         self._close_after_cancel = False
+        self._batch_started_at: float | None = None
+        self._status_message = "Ready"
+        self._status_timer = QTimer(self)
+        self._status_timer.setInterval(1000)
+        self._status_timer.timeout.connect(self._refresh_status_label)
 
         root = QWidget()
         layout = QVBoxLayout(root)
@@ -239,6 +245,7 @@ class MainWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("%p%")
         layout.addWidget(self.progress_bar)
         self.status_label = QLabel("Ready")
         layout.addWidget(self.status_label)
@@ -306,6 +313,28 @@ class MainWindow(QMainWindow):
             widget.setEnabled(not running)
         self.cancel_button.setEnabled(running)
 
+    def _set_progress_value(self, value: int) -> None:
+        if value == INDETERMINATE_PROGRESS:
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setTextVisible(False)
+            return
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setValue(max(0, min(100, value)))
+
+    def _set_status_message(self, message: str) -> None:
+        self._status_message = message
+        self._refresh_status_label()
+
+    @Slot()
+    def _refresh_status_label(self) -> None:
+        message = self._status_message
+        if self._batch_started_at is not None:
+            elapsed = format_elapsed(time.monotonic() - self._batch_started_at)
+            message = f"{message} • elapsed {elapsed}"
+        self.status_label.setText(message)
+
     @Slot()
     def start_batch(self) -> None:
         files = [Path(self.media_list.item(i).text()) for i in range(self.media_list.count())]
@@ -324,8 +353,10 @@ class MainWindow(QMainWindow):
             return
 
         self.log.clear()
-        self.progress_bar.setValue(0)
-        self.status_label.setText("Starting...")
+        self._batch_started_at = time.monotonic()
+        self._set_progress_value(INDETERMINATE_PROGRESS)
+        self._set_status_message("Starting...")
+        self._status_timer.start()
         self._set_running(True)
 
         self._thread = QThread(self)
@@ -353,21 +384,23 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.cancel()
             self.cancel_button.setEnabled(False)
-            self.status_label.setText("Cancelling after the current safe checkpoint...")
+            self._set_status_message("Cancelling after the current safe checkpoint...")
 
     @Slot(int, str)
     def on_progress(self, value: int, message: str) -> None:
-        self.progress_bar.setValue(max(0, min(100, value)))
-        self.status_label.setText(message)
+        self._set_progress_value(value)
+        self._set_status_message(message)
 
     @Slot(int, int, bool)
     def on_completed(self, completed: int, failed: int, cancelled: bool) -> None:
         self._set_running(False)
+        self._status_timer.stop()
         if cancelled:
             message = f"Cancelled. Created {completed} subtitle file(s); {failed} failed."
         else:
             message = f"Finished. Created {completed} subtitle file(s); {failed} failed."
-        self.status_label.setText(message)
+        self._set_status_message(message)
+        self._batch_started_at = None
         self.log.appendPlainText(message)
         self._worker = None
         self._thread = None
@@ -388,6 +421,7 @@ class MainWindow(QMainWindow):
         if answer == QMessageBox.Yes:
             self._close_after_cancel = True
             self._worker.cancel()
+            self._set_status_message("Cancelling after the current safe checkpoint...")
             event.ignore()
         else:
             event.ignore()

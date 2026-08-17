@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Current CaptionMiner desktop GUI layout preview in the README.
+- Elapsed-time feedback while a transcription batch is running.
+- Unit coverage for indeterminate progress, batch scaling, and elapsed-time formatting.
+
+### Fixed
+
+- Replaced the misleading stationary 0% state during model loading, media analysis, and pre-segment transcription with an animated busy indicator.
+- Moved 100% completion to after the SRT has been written instead of reporting completion while finalization was still underway.
 
 ### Planned
 
