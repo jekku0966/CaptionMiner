@@ -104,6 +104,7 @@ def _build_options(args: argparse.Namespace) -> TranscriptionOptions:
         vad_filter=not args.no_vad,
         initial_prompt=base.initial_prompt,
         max_characters_per_cue=base.max_characters_per_cue,
+        recover_gaps=base.recover_gaps,
     )
 
 
@@ -134,9 +135,14 @@ def _run_transcribe(args: argparse.Namespace) -> int:
             language_detail = written.metadata.language or "unknown"
             if probability is not None:
                 language_detail += f" ({probability:.1%})"
+            recovery_detail = (
+                f" | recovered {written.metadata.recovered_word_count} word(s)"
+                if written.metadata.recovered_word_count
+                else ""
+            )
             print(
                 f"Created: {written.output} | {written.cue_count} cues | "
-                f"language {language_detail} | {written.metadata.device}"
+                f"language {language_detail} | {written.metadata.device}{recovery_detail}"
             )
         except KeyboardInterrupt:
             print("\nCancelled.", file=sys.stderr)
