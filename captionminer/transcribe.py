@@ -169,7 +169,7 @@ class TranscriptionEngine:
         progress: ProgressCallback | None,
         cancel: CancelCheck | None,
     ) -> TranscriptionResult:
-        _notify(progress, 0.0, f"Transcribing {source.name}...")
+        _notify(progress, None, f"Analyzing audio and preparing {source.name}...")
         kwargs: dict[str, Any] = {
             "language": self.options.language,
             "beam_size": self.options.beam_size,
@@ -182,6 +182,7 @@ class TranscriptionEngine:
 
         segments, info = model.transcribe(str(source), **kwargs)
         duration = _safe_float(getattr(info, "duration", None))
+        _notify(progress, None, f"Transcribing {source.name}; waiting for timed speech...")
         words: list[WordTimestamp] = []
         fallback_segments: list[SourceSegment] = []
 
@@ -209,8 +210,13 @@ class TranscriptionEngine:
                     )
                 )
 
-            fraction = min(0.99, end / duration) if duration and duration > 0 else None
-            _notify(progress, fraction, f"Transcribing {source.name}...")
+            if duration and duration > 0:
+                fraction = min(0.98, end / duration)
+                message = f"Transcribing {source.name} ({end:.1f}s / {duration:.1f}s)..."
+            else:
+                fraction = None
+                message = f"Transcribing {source.name}..."
+            _notify(progress, fraction, message)
 
         if _cancelled(cancel):
             raise TranscriptionCancelled("transcription cancelled")
@@ -238,7 +244,7 @@ class TranscriptionEngine:
             device=self.runtime.device,
             compute_type=self.runtime.compute_type,
         )
-        _notify(progress, 1.0, f"Created {len(cues)} subtitle cues for {source.name}.")
+        _notify(progress, 0.99, f"Preparing {len(cues)} subtitle cues for {source.name}...")
         return TranscriptionResult(source=source, cues=tuple(cues), metadata=metadata)
 
 
