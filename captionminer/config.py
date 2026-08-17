@@ -29,8 +29,14 @@ MODEL_PROFILES: dict[str, ModelProfile] = {
     "accurate": ModelProfile(
         key="accurate",
         label="Accurate",
+        model_name="large-v2",
+        description="Quality-first profile validated on short exported clips.",
+    ),
+    "experimental": ModelProfile(
+        key="experimental",
+        label="Experimental",
         model_name="large-v3",
-        description="Best bundled profile for accuracy; slowest and largest.",
+        description="Testing-only profile; can reject valid speech in short mixed-audio clips.",
     ),
 }
 
@@ -99,7 +105,7 @@ def options_for_profile(
     initial_prompt: str | None = None,
     max_characters_per_cue: int = 84,
 ) -> TranscriptionOptions:
-    """Build validated options from a public Fast/Balanced/Accurate profile."""
+    """Build validated options from a public model profile."""
 
     try:
         selected = MODEL_PROFILES[profile]
