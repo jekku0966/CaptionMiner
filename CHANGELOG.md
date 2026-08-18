@@ -4,10 +4,15 @@ All notable CaptionMiner changes will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to use [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once compatibility expectations stabilize.
 
-## [Unreleased]
+## [0.2.0-alpha.1] - 2026-08-18
 
 ### Added
 
+- Explicit GUI consent before an uncached speech-recognition model can download.
+- Persistent per-user model-download policy using Qt's native settings storage.
+- Per-profile local model folders, model-file validation, downloaded-cache access, and a compact Settings dialog.
+- Non-interactive CLI download enforcement with an explicit per-command `--allow-model-download` override.
+- A plain-language `START_HERE.txt` required in every Windows release package.
 - Current CaptionMiner desktop GUI layout preview in the README.
 - Elapsed-time feedback while a transcription batch is running.
 - Unit coverage for indeterminate progress, batch scaling, and elapsed-time formatting.
@@ -33,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Cached and manually selected models now load with faster-whisper's local-files-only mode so transcription cannot silently fetch missing model data.
 - Changed the Accurate profile from `large-v3` to `large-v2` after a reproducible 70-second clip produced 15 cues with `large-v2` but no usable speech with `large-v3`, including with VAD disabled.
 - Retained `large-v3` as an explicitly Experimental profile for continued comparison instead of presenting it as the dependable quality-first option.
 - Reserved the final portion of quality-profile progress for visible recovery work instead of presenting the first recognition pass as the entire transcription.

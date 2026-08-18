@@ -4,7 +4,7 @@
 
 CaptionMiner takes one or more local media files, transcribes their speech with `faster-whisper`, and writes a matching `.srt` subtitle file for each source. It does not style captions, modify the media, upload content, or decide how subtitles should look. Styling remains where it belongs: in the video editor and under the user's control.
 
-> **Status:** early alpha / v0.1.0. The transcription pipeline, SRT writer, CLI, desktop GUI, and repeatable portable Windows build are implemented. A real CaptionMiner SRT has been imported successfully into all three target Windows desktop editors. Clean-machine builds and broader editor-version combinations still need testing.
+> **Status:** v0.2.0-alpha.1. The transcription pipeline, SRT writer, CLI, desktop GUI, explicit model-download consent, offline-model selection, and repeatable portable Windows build are implemented. A real CaptionMiner SRT has been imported successfully into all three target Windows desktop editors. This is a development preview, not the final v0.2.0 release; clean-machine builds and broader editor-version combinations still need testing.
 
 ## What CaptionMiner does
 
@@ -105,6 +105,8 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 ## Features
 
 - **Local transcription** — media stays on the machine running CaptionMiner.
+- **Explicit model-download consent** — an uncached model is never downloaded by the GUI before the user chooses whether to allow it.
+- **Manual local models** — each profile can use a compatible faster-whisper/CTranslate2 model folder without network access.
 - **Video and audio input** — PyAV decodes formats supported by its bundled FFmpeg libraries.
 - **No separate FFmpeg install** — `faster-whisper` uses PyAV, which ships FFmpeg libraries in its Python package.
 - **NVIDIA GPU support** — CTranslate2 uses CUDA when available.
@@ -128,17 +130,17 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 
 ## Current desktop GUI
 
-![CaptionMiner 0.1.0 desktop GUI layout preview](docs/assets/captionminer-gui-preview.png)
+![CaptionMiner desktop GUI layout preview](docs/assets/captionminer-gui-preview.png)
 
 > **Layout preview:** shown with example queue entries so the file list is visible. CaptionMiner uses native PySide6/Qt controls, so fonts, title-bar appearance, spacing, and control styling can vary slightly with the installed Windows version, display scaling, and system theme.
 
-The interface is deliberately utilitarian: queue clips, select transcription settings, choose where the SRT files go, and start the batch. Subtitle styling remains entirely inside Resolve, Premiere Pro, or CapCut.
+The interface is deliberately utilitarian: queue clips, select transcription settings, choose where the SRT files go, manage model-download behavior, and start the batch. Subtitle styling remains entirely inside Resolve, Premiere Pro, or CapCut.
 
 ---
 
 ## Explicit non-goals
 
-CaptionMiner v0.1 does **not**:
+The current CaptionMiner alpha does **not**:
 
 - style subtitles
 - choose fonts, colors, outlines, backgrounds, sizes, or positions
@@ -222,11 +224,19 @@ The completed SRT is written to a temporary file in the destination directory, f
 
 ## Requirements
 
-### Required
+### Ready-made Windows release
+
+- 64-bit Windows 10 or Windows 11
+- Enough storage for CaptionMiner and the selected speech-recognition model
+- Internet access only when the user explicitly permits an uncached model download
+
+The official portable package does not require Python or a separate FFmpeg installation. It also includes the approved CUDA 12 / cuDNN 9 runtime files required by the packaged GPU path. An NVIDIA GPU remains optional, and a current NVIDIA graphics driver is recommended when using one.
+
+### Source installation and development
 
 - Python **3.10 or newer**
-- Enough storage for the selected Whisper model
-- Internet access on the first use of a model, unless that model is already cached locally
+- The dependencies declared in `pyproject.toml`
+- Internet access during environment setup unless the required packages are already available locally
 
 ### Recommended for GPU transcription
 
@@ -295,12 +305,12 @@ The default build runs Ruff and the full test suite, freezes the application, sm
 
 ```text
 dist\CaptionMiner\CaptionMiner.exe
-dist\CaptionMiner-v0.1.0-windows-x64.zip
+dist\CaptionMiner-v0.2.0-alpha.1-windows-x64.zip
 ```
 
 Double-click `CaptionMiner.exe` to open the GUI. The folder's `_internal` directory must remain beside it. This is intentionally PyInstaller **onedir**, like HighlightMiner, instead of a literal `--onefile` package that extracts the Qt/CTranslate2 runtime on every launch. Optional locally supplied NVIDIA DLLs belong in the ready-made `runtime\cuda` staging folder; the builder recreates that folder if needed, copies only its documented CUDA 12 / cuDNN 9 allowlist, and does not sweep unrelated repository DLLs.
 
-The packaged app does not require Python. Whisper models are still downloaded into the normal user cache when first selected, and CUDA still requires a compatible NVIDIA runtime. See [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md) for the exact build contents, switches, CI artifact, CUDA behavior, and troubleshooting.
+The packaged app does not require Python. Whisper models are not bundled. When a selected model is missing, the GUI asks before connecting to Hugging Face and can instead use a compatible local model folder. See [`START_HERE.txt`](START_HERE.txt) for release-user instructions and [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md) for the exact build contents, switches, CI artifact, CUDA behavior, and troubleshooting.
 
 The ZIP uploaded by the packaging workflow is short-lived CI output for regression testing. Only Windows packages manually attached by the maintainer to CaptionMiner's public [GitHub Releases page](https://github.com/jekku0966/CaptionMiner/releases) are official CaptionMiner binaries. Official packages are built from the matching public tag and include separate SHA-256 checksums plus a provenance manifest; the source repository remains the source of truth for application code.
 
@@ -347,6 +357,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 5. Optionally enter names/terms in **Custom vocabulary**.
 6. Leave the output folder empty to create each SRT beside its source clip.
 7. Click **Transcribe**.
+8. If that model is not installed, explicitly allow its download or choose a compatible local model folder.
 
 Example result:
 
@@ -374,7 +385,19 @@ The **All files** option remains available because actual decoding support is de
 
 ### Accuracy profile
 
-Selects the model and recovery behavior described in [Model profiles](#model-profiles). The first use downloads that model. Model loading can dominate processing time for a very short clip. Accurate and Experimental can perform additional focused inference after the primary pass; this is expected rather than the progress bar developing trust issues again.
+Selects the model and recovery behavior described in [Model profiles](#model-profiles). If the model is not installed, CaptionMiner asks before downloading it or lets the user choose a compatible local folder. Model loading can dominate processing time for a very short clip. Accurate and Experimental can perform additional focused inference after the primary pass; this is expected rather than the progress bar developing trust issues again.
+
+### Settings and local models
+
+The **Settings** button controls what happens when a selected model is missing:
+
+- **Ask before downloading** — the default; no download starts until the consent dialog is accepted.
+- **Download automatically** — permit future missing profile models to download without another prompt.
+- **Never download automatically** — prevent model downloads until this preference is changed.
+
+The same dialog can associate a profile with a compatible local faster-whisper/CTranslate2 model folder, remove that association, and open the standard downloaded-model cache. A manually selected folder must contain at least `config.json`, `model.bin`, and `tokenizer.json`; requiring the tokenizer locally prevents a nominally offline model from causing a secondary tokenizer download.
+
+These small preferences use Qt's native per-user settings storage. On Windows, they are stored for the current user rather than in a `settings.json` beside the executable. Model weights remain in the Hugging Face cache or the manually selected folder and are never copied into the settings store.
 
 ### Spoken language
 
@@ -463,7 +486,7 @@ CaptionMiner doctor
 
 Python: 3.x.x (...\.venv\Scripts\python.exe)
 Platform: Windows-...
-captionminer: 0.1.0
+captionminer: 0.2.0-alpha.1
 faster-whisper: ...
 CTranslate2: ...
 PyAV: ...
@@ -479,6 +502,15 @@ Result: looks good
 ```powershell
 .\.venv\Scripts\python.exe -m captionminer transcribe "D:\Clips\H001.mp4"
 ```
+
+The CLI is deliberately non-interactive. If the selected model is not already cached or supplied as a local folder, the command exits without downloading it. Explicitly authorize that command with:
+
+```powershell
+.\.venv\Scripts\python.exe -m captionminer transcribe "D:\Clips\H001.mp4" `
+  --allow-model-download
+```
+
+The flag applies only to that command and does not change the saved GUI preference. A saved **Download automatically** preference also permits CLI downloads; **Never download automatically** blocks them unless the command includes the explicit flag.
 
 ### Transcribe several clips with one model load
 
@@ -596,15 +628,25 @@ Runtime depends on:
 
 A short exported clip on a working NVIDIA setup will generally spend proportionally more time loading the model than decoding its speech. Batch clips together so CaptionMiner loads the model once. Accurate and Experimental intentionally trade additional inference time for a chance to recover speech skipped by the primary decoding windows; Balanced and Fast remain single-pass profiles.
 
-No fixed speed number is promised for v0.1 because no standardized CaptionMiner benchmark set has been published yet. If Automatic mode is unexpectedly slow, run `doctor` and check the completion log to confirm whether the job used `cuda` or `cpu`.
+No fixed speed number is promised for the current alpha because no standardized CaptionMiner benchmark set has been published yet. If Automatic mode is unexpectedly slow, run `doctor` and check the completion log to confirm whether the job used `cuda` or `cpu`.
 
 ---
 
 ## First-run model download and offline use
 
-When a model name such as `medium`, `large-v2`, or experimental `large-v3` is loaded for the first time, faster-whisper downloads the compatible model from Hugging Face Hub into the user's model cache. CaptionMiner does not host or proxy these model files.
+When a model name such as `medium`, `large-v2`, or experimental `large-v3` is selected for the first time, the GUI asks for permission before faster-whisper downloads the compatible model from Hugging Face Hub. Choosing **No** stores that refusal, prevents the transcription from starting, and can be changed later through **Settings**. CaptionMiner does not host or proxy these model files.
 
-After the model is cached, transcription itself can run without uploading the source media. A future cache cleanup, profile change, new Windows account, or fresh machine can require another download.
+The default Windows cache location is:
+
+```text
+%USERPROFILE%\.cache\huggingface\hub
+```
+
+`HF_HUB_CACHE`, `HF_HOME`, or `XDG_CACHE_HOME` can override that path. CaptionMiner's **Open downloaded model folder** button resolves the effective location for the current environment.
+
+After the model is cached, CaptionMiner resolves it with local-files-only behavior so starting a transcription does not silently check for or download a replacement. A future cache cleanup, profile change, new Windows account, or fresh machine can require another explicit choice.
+
+For offline use, select a complete local model folder in the consent prompt or Settings. CaptionMiner validates the required model files and passes the folder directly to faster-whisper with networking disabled for that load. CaptionMiner does not certify the trustworthiness or identity of an arbitrary user-supplied model; obtain it through a source you trust.
 
 If a corporate firewall, proxy, antivirus product, or restricted DNS policy blocks Hugging Face, the first model load will fail. Resolve that network policy or pre-populate a compatible local model cache; do not repeatedly reinstall CaptionMiner and expect the firewall to become emotionally available.
 
@@ -722,7 +764,7 @@ Also intentional. CaptionMiner does not insert presentation line breaks. Each ed
 
 ### Music or overlapping speakers produce nonsense
 
-Whisper is speech recognition, not source separation. Cleaner dialogue audio will transcribe more reliably. Speaker diarization and vocal isolation are outside v0.1.
+Whisper is speech recognition, not source separation. Cleaner dialogue audio will transcribe more reliably. Speaker diarization and vocal isolation are outside the current alpha.
 
 ---
 
@@ -745,6 +787,7 @@ CaptionMiner/
 │   ├── config.py
 │   ├── doctor.py
 │   ├── gui.py
+│   ├── model_management.py
 │   ├── models.py
 │   ├── output.py
 │   ├── pipeline.py
@@ -754,6 +797,7 @@ CaptionMiner/
 ├── tests/
 │   ├── test_cli.py
 │   ├── test_config.py
+│   ├── test_model_management.py
 │   ├── test_output.py
 │   ├── test_packaging.py
 │   ├── test_pipeline.py
@@ -775,6 +819,7 @@ CaptionMiner/
 ├── LICENSE
 ├── README.md
 ├── SECURITY.md
+├── START_HERE.txt
 ├── build_windows.ps1
 ├── pyproject.toml
 ├── run.bat
@@ -949,11 +994,12 @@ The correct expectation is **a strong local first-pass transcript that saves typ
 - Ongoing: record model, device, and runtime information in transcription bug reports.
 - Ongoing: improve only cue-generation rules demonstrated to fail on real material.
 
-### v0.2 — packaging and workflow polish
+### v0.2 — current alpha
 
 - Validate the repeatable Windows application build on a clean non-development machine.
+- Added explicit first-run model download consent, persistent download policy, and manually selected offline model folders.
 - Add byte-level first-run model download progress if the upstream model-loading API exposes it reliably.
-- Persist safe GUI preferences.
+- Persist additional safe GUI preferences only where doing so removes repeated work without hiding behavior.
 - Add optional watch-folder/batch automation if real usage justifies it.
 
 ### HighlightMiner integration
@@ -1011,7 +1057,7 @@ Technically yes, but the initial product is aimed at exported clips. HighlightMi
 
 ### Can it translate Finnish speech to English subtitles?
 
-Not in v0.1. Translation is intentionally out of scope until plain transcription is validated.
+Not in the current alpha. Translation is intentionally out of scope until plain transcription is validated.
 
 ### Can it label speakers?
 

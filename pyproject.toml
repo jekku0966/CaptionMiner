@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "captionminer"
-version = "0.1.0"
+version = "0.2.0-alpha.1"
 description = "Local media-to-SRT transcription for DaVinci Resolve, Adobe Premiere Pro, and CapCut."
 readme = "README.md"
 requires-python = ">=3.10"

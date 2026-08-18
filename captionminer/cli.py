@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from captionminer import __version__
 from captionminer.config import MODEL_PROFILES, TranscriptionOptions, options_for_profile
 from captionminer.doctor import print_report
+from captionminer.model_management import (
+    DownloadPolicy,
+    ModelCacheLookup,
+    ModelPreferences,
+    find_cached_model,
+    local_model_validation_error,
+    resolve_installed_model,
+)
 from captionminer.pipeline import transcribe_to_srt
 from captionminer.transcribe import TranscriptionCancelled, TranscriptionEngine
 
@@ -40,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument(
         "--model",
         help="advanced override for the faster-whisper model name or local model path",
+    )
+    transcribe.add_argument(
+        "--allow-model-download",
+        action="store_true",
+        help="explicitly allow a missing model to be downloaded for this command",
     )
     transcribe.add_argument(
         "--language",
@@ -108,8 +122,74 @@ def _build_options(args: argparse.Namespace) -> TranscriptionOptions:
     )
 
 
-def _run_transcribe(args: argparse.Namespace) -> int:
+class ModelDownloadPermissionError(RuntimeError):
+    """A CLI transcription would require a download that was not authorized."""
+
+
+def _prepare_options(
+    args: argparse.Namespace,
+    *,
+    preferences: ModelPreferences | None = None,
+    cache_lookup: ModelCacheLookup = find_cached_model,
+) -> TranscriptionOptions:
+    """Resolve a cached/local model or enforce explicit CLI download permission."""
+
     options = _build_options(args)
+    preferences = preferences or ModelPreferences()
+
+    if args.model:
+        possible_path = Path(args.model).expanduser()
+        if possible_path.exists():
+            error = local_model_validation_error(possible_path)
+            if error is not None:
+                raise ValueError(error)
+            return replace(
+                options,
+                model_name=str(possible_path.resolve()),
+                local_files_only=True,
+            )
+        cached_path = cache_lookup(args.model)
+        if cached_path is not None:
+            return replace(options, local_files_only=True)
+        invalid_local_reason = None
+    else:
+        lookup = resolve_installed_model(
+            args.profile,
+            options.model_name,
+            preferences,
+            cache_lookup=cache_lookup,
+        )
+        if lookup.selection is not None:
+            return replace(
+                options,
+                model_name=lookup.selection.reference,
+                local_files_only=True,
+            )
+        invalid_local_reason = lookup.invalid_local_reason
+
+    if args.allow_model_download or preferences.download_policy is DownloadPolicy.ALLOW:
+        return replace(options, local_files_only=False)
+
+    details = f"Model {options.model_name!r} is not installed."
+    if invalid_local_reason:
+        details += f" The saved local model cannot be used: {invalid_local_reason}"
+    if preferences.download_policy is DownloadPolicy.DENY:
+        details += " Automatic model downloads are disabled in CaptionMiner Settings."
+    else:
+        details += " The CLI does not display an interactive download-consent prompt."
+    raise ModelDownloadPermissionError(
+        details
+        + " Use --allow-model-download for this command, pass a local folder with "
+        "--model, or open the GUI to choose."
+    )
+
+
+def _run_transcribe(args: argparse.Namespace) -> int:
+    try:
+        options = _prepare_options(args)
+    except (ModelDownloadPermissionError, ValueError) as exc:
+        print(f"Cannot start transcription: {exc}", file=sys.stderr)
+        return 2
     engine = TranscriptionEngine(options)
     failures = 0
 
