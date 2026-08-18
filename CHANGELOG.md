@@ -17,7 +17,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Repeatable PyInstaller onedir packaging with a version-aware PowerShell builder and portable ZIP output.
 - GitHub Actions packaging that verifies frozen dependencies, smoke-tests the PySide6 GUI, and uploads a Windows x64 artifact.
 - A version-synchronization regression test for `pyproject.toml` and the runtime package version.
-- Manual Windows import validation using a real HighlightMiner export and CaptionMiner SRT in DaVinci Resolve, Adobe Premiere Pro, and CapCut Desktop.
+- On 2026-08-18, manual Windows import validation using a real HighlightMiner export and CaptionMiner SRT in DaVinci Resolve, Adobe Premiere Pro, and CapCut Desktop.
+- A tracked `runtime\cuda` staging directory for optional local CUDA/cuDNN build files.
 
 ### Fixed
 
@@ -40,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Centralized `pyproject.toml` version loading in one TOML-aware helper shared by builds, CI, and tests.
 - Restricted portable CUDA copying to an explicit CUDA 12 / cuDNN 9 allowlist under `runtime\cuda`.
 - Kept conservative PyInstaller package collection until clean-machine CPU and CUDA validation establishes a safe minimal bundle.
+- Made the Windows builder recreate the local CUDA runtime staging directory automatically when it is missing.
 
 ### Planned
 
