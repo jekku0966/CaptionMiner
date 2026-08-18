@@ -81,6 +81,15 @@ jobs:
             }
           }
 
+      - name: Verify packaged documentation
+        shell: powershell
+        run: |
+          foreach ($required in @("README.md", "BUILD_WINDOWS.md", "ATTRIBUTIONS.md", "SECURITY.md", "LICENSE")) {
+            if (-not (Test-Path ".\dist\CaptionMiner\$required" -PathType Leaf)) {
+              throw "Packaged application is missing $required."
+            }
+          }
+
       - name: Smoke-test frozen PySide6 GUI
         shell: powershell
         run: |

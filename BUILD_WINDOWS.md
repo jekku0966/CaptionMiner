@@ -37,6 +37,7 @@ dist/
 │   ├── README.md
 │   ├── BUILD_WINDOWS.md
 │   ├── ATTRIBUTIONS.md
+│   ├── SECURITY.md
 │   ├── LICENSE
 │   └── _internal/
 └── CaptionMiner-v0.2.0-windows-x64.zip
@@ -51,7 +52,7 @@ The script will:
 5. Install CaptionMiner, development tools, and PyInstaller.
 6. Run Ruff and the complete unit test suite.
 7. Build `CaptionMiner.exe` using `CaptionMiner.spec`.
-8. Copy user-facing documentation and licensing files.
+8. Copy user-facing documentation, security guidance, and licensing files.
 9. Copy locally supplied CUDA/cuDNN DLLs when present.
 10. Smoke-test `CaptionMiner.exe --version` and `CaptionMiner.exe doctor`.
 11. Create the versioned portable ZIP.
@@ -128,6 +129,8 @@ The workflow:
 4. Uploads `CaptionMiner-v<version>-windows-x64.zip` as a workflow artifact.
 
 The CI runner does not download or redistribute external NVIDIA CUDA/cuDNN DLLs. Its artifact validates the frozen Python application and CPU path. A locally built ZIP can include compatible runtime DLLs already supplied by the builder.
+
+The workflow artifact is temporary regression evidence, not an official CaptionMiner release. Official Windows packages are built from an exact public tag with the maintainer-only release tooling, then manually attached to the matching tag on the public repository's [GitHub Releases page](https://github.com/jekku0966/CaptionMiner/releases). That release process also publishes SHA-256 checksums and a provenance manifest.
 
 ## Current build decisions
 

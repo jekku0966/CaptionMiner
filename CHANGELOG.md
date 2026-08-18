@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A version-synchronization regression test for `pyproject.toml` and the runtime package version.
 - On 2026-08-18, manual Windows import validation using a real HighlightMiner export and CaptionMiner SRT in DaVinci Resolve, Adobe Premiere Pro, and CapCut Desktop.
 - A tracked `runtime\cuda` staging directory for optional local CUDA/cuDNN build files.
+- Maintainer-only tagged-source release tooling with strict frozen-app checks, SHA-256 checksums, and a provenance manifest for official Windows packages.
 
 ### Fixed
 
@@ -42,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Restricted portable CUDA copying to an explicit CUDA 12 / cuDNN 9 allowlist under `runtime\cuda`.
 - Kept conservative PyInstaller package collection until clean-machine CPU and CUDA validation establishes a safe minimal bundle.
 - Made the Windows builder recreate the local CUDA runtime staging directory automatically when it is missing.
+- Included `SECURITY.md` in portable Windows packages and verified the complete documentation set in packaging CI.
 
 ### Planned
 

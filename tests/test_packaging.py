@@ -14,6 +14,13 @@ def test_runtime_version_matches_pyproject() -> None:
     assert __version__ == read_project_version(pyproject)
 
 
+def test_windows_builder_includes_required_release_documents() -> None:
+    builder = (Path(__file__).parents[1] / "build_windows.ps1").read_text(encoding="utf-8")
+
+    for document in ("README.md", "BUILD_WINDOWS.md", "ATTRIBUTIONS.md", "SECURITY.md", "LICENSE"):
+        assert f'"{document}"' in builder
+
+
 @pytest.mark.parametrize(
     "document",
     (

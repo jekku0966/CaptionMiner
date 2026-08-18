@@ -302,6 +302,8 @@ Double-click `CaptionMiner.exe` to open the GUI. The folder's `_internal` direct
 
 The packaged app does not require Python. Whisper models are still downloaded into the normal user cache when first selected, and CUDA still requires a compatible NVIDIA runtime. See [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md) for the exact build contents, switches, CI artifact, CUDA behavior, and troubleshooting.
 
+The ZIP uploaded by the packaging workflow is short-lived CI output for regression testing. Only Windows packages manually attached by the maintainer to CaptionMiner's public [GitHub Releases page](https://github.com/jekku0966/CaptionMiner/releases) are official CaptionMiner binaries. Official packages are built from the matching public tag and include separate SHA-256 checksums plus a provenance manifest; the source repository remains the source of truth for application code.
+
 ---
 
 ## Quick start — Windows source installation
@@ -810,7 +812,7 @@ Format:
 
 The unit tests intentionally avoid importing `faster-whisper` and PySide6 unless that functionality is under test. This keeps cue/output tests fast and permits CI to validate the deterministic application logic without downloading speech models.
 
-GitHub Actions tests Python 3.10, 3.12, and 3.13 on Windows. A separate Windows packaging workflow builds the portable folder, verifies frozen dependency imports, smoke-tests the offscreen PySide6 GUI, and uploads the versioned ZIP as an artifact. CI does not claim that CUDA inference works merely because CPU packaging succeeds; GPU behavior requires a real compatible NVIDIA environment.
+GitHub Actions tests Python 3.10, 3.12, and 3.13 on Windows. A separate Windows packaging workflow builds the portable folder, verifies frozen dependency imports and packaged documentation, smoke-tests the offscreen PySide6 GUI, and uploads the versioned ZIP as a temporary artifact. CI artifacts are not official release binaries. CI also does not claim that CUDA inference works merely because CPU packaging succeeds; GPU behavior requires a real compatible NVIDIA environment.
 
 ---
 

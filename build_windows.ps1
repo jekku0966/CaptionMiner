@@ -160,7 +160,7 @@ if (-not (Test-Path $ExePath)) {
 
 Write-Host ""
 Write-Host "Adding user-facing files..."
-foreach ($Name in @("README.md", "BUILD_WINDOWS.md", "ATTRIBUTIONS.md", "LICENSE")) {
+foreach ($Name in @("README.md", "BUILD_WINDOWS.md", "ATTRIBUTIONS.md", "SECURITY.md", "LICENSE")) {
     $Source = Join-Path $RepoRoot $Name
     if (Test-Path $Source) {
         Copy-Item $Source (Join-Path $DistRoot $Name) -Force
