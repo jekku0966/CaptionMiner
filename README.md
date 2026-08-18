@@ -4,7 +4,7 @@
 
 CaptionMiner takes one or more local media files, transcribes their speech with `faster-whisper`, and writes a matching `.srt` subtitle file for each source. It does not style captions, modify the media, upload content, or decide how subtitles should look. Styling remains where it belongs: in the video editor and under the user's control.
 
-> **Status:** early alpha / v0.1.0. The transcription pipeline, SRT writer, CLI, desktop GUI, and repeatable portable Windows build are implemented. Real recordings, clean-machine builds, and editor-version combinations still need broader field testing.
+> **Status:** early alpha / v0.1.0. The transcription pipeline, SRT writer, CLI, desktop GUI, and repeatable portable Windows build are implemented. A real CaptionMiner SRT has been imported successfully into all three target Windows desktop editors. Clean-machine builds and broader editor-version combinations still need testing.
 
 ## What CaptionMiner does
 
@@ -72,13 +72,25 @@ CaptionMiner writes standard SubRip `.srt` files using:
 - CRLF line endings
 - monotonically ordered, non-overlapping cue times
 
-| Editor | SRT import | CaptionMiner target | Notes |
-|---|---|---|---|
-| DaVinci Resolve | Yes | Plain subtitle track / transcription import | Match the subtitle and clip timeline start. |
-| Adobe Premiere Pro | Yes | Imported caption track | Import the SRT as media and place it in the sequence. |
-| CapCut Desktop | Yes | Imported local captions | Import through Captions/Local captions. UI wording can change by version. |
-| CapCut Web | Yes | Imported local captions | Availability may depend on the current web interface. |
-| CapCut Mobile | No direct SRT import as of January 2026 | Not currently targetable | Create/import captions on Desktop or Web instead. |
+| Editor | SRT import | Manual CaptionMiner test | CaptionMiner target | Notes |
+|---|---|---|---|---|
+| DaVinci Resolve | Yes | Passed on Windows | Plain subtitle track / transcription import | Match the subtitle and clip timeline start. |
+| Adobe Premiere Pro | Yes | Passed on Windows | Imported caption track | Import the SRT as media and place it in the sequence. |
+| CapCut Desktop | Yes | Passed on Windows | Imported local captions | Import through Captions/Local captions. UI wording can change by version. |
+| CapCut Web | Yes | Not tested | Imported local captions | Availability may depend on the current web interface. |
+| CapCut Mobile | No direct SRT import as of January 2026 | Not tested | Not currently targetable | Create/import captions on Desktop or Web instead. |
+
+### Manual desktop-editor validation
+
+On 2026-08-18, one real HighlightMiner-exported video and its CaptionMiner-generated SRT were imported manually into the user's installed Windows desktop copies of:
+
+- DaVinci Resolve
+- Adobe Premiere Pro
+- CapCut Desktop
+
+All three editors created separate, timed subtitle or caption cues on their timelines. Caption text remained editable and presentation styling remained controlled by the editor. This validates the generated SRT structure and media-relative cue timing for that field-tested setup.
+
+The exact editor build numbers were not recorded during this first test. The result therefore means **confirmed working on the tested Windows machine**, not certified for every past or future release. Future validation reports should record the editor name and exact version, Windows version, CaptionMiner version or commit, test date, and whether import, cue timing, editing, and styling all behaved correctly.
 
 Official editor documentation:
 
@@ -86,7 +98,7 @@ Official editor documentation:
 - DaVinci Resolve 19 New Features Guide — SRT transcription import/export: https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_19_New_Features_Guide.pdf
 - CapCut — importing subtitle files: https://www.capcut.com/help/how-to-import-subtitles
 
-Compatibility means that the editors can import CaptionMiner's SRT structure. It does not mean every historical or future editor release has been individually certified. If an editor changes its import behavior, open an issue with the editor name/version and a minimal non-sensitive SRT that reproduces the problem.
+Compatibility means that the editors can import CaptionMiner's SRT structure. It does not mean every historical or future editor release has been individually certified. If an editor changes its import behavior, open an issue with the editor name and exact version, Windows version, CaptionMiner version or commit, and a minimal non-sensitive SRT that reproduces the problem.
 
 ---
 
@@ -925,10 +937,11 @@ The correct expectation is **a strong local first-pass transcript that saves typ
 
 ### v0.1 — standalone validation
 
-- Test real HighlightMiner exports.
-- Verify imported SRTs in current Resolve, Premiere Pro, and CapCut Desktop versions.
-- Record model/device/runtime information in bug reports.
-- Improve only cue-generation rules demonstrated to fail on real material.
+- Completed: test a real HighlightMiner export through CaptionMiner.
+- Completed: import the generated SRT successfully into Resolve, Premiere Pro, and CapCut Desktop on Windows.
+- Next validation pass: record exact editor build numbers alongside Windows and CaptionMiner versions.
+- Ongoing: record model, device, and runtime information in transcription bug reports.
+- Ongoing: improve only cue-generation rules demonstrated to fail on real material.
 
 ### v0.2 — packaging and workflow polish
 

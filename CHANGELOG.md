@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Repeatable PyInstaller onedir packaging with a version-aware PowerShell builder and portable ZIP output.
 - GitHub Actions packaging that verifies frozen dependencies, smoke-tests the PySide6 GUI, and uploads a Windows x64 artifact.
 - A version-synchronization regression test for `pyproject.toml` and the runtime package version.
+- Manual Windows import validation using a real HighlightMiner export and CaptionMiner SRT in DaVinci Resolve, Adobe Premiere Pro, and CapCut Desktop.
 
 ### Fixed
 
@@ -42,7 +43,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Planned
 
-- Validate real exported clips across current Resolve, Premiere Pro, and CapCut Desktop releases.
+- Record exact editor build numbers during the next Resolve, Premiere Pro, and CapCut Desktop validation pass.
+- Repeat SRT import regression checks after editor updates or CaptionMiner output-format changes.
 - Validate the portable Windows build on clean Windows hardware.
 - Integrate the reusable transcription core with HighlightMiner.
 
