@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import PurePosixPath, PureWindowsPath
 
-
 REQUIRED_RELEASE_DOCUMENTS = (
     "README.md",
     "BUILD_WINDOWS.md",

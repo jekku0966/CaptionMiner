@@ -8,9 +8,9 @@ from captionminer import __version__
 from tools.project_version import read_project_version
 from tools.release_documents import (
     REQUIRED_RELEASE_DOCUMENTS,
-    main as print_release_documents,
     validate_release_documents,
 )
+from tools.release_documents import main as print_release_documents
 
 
 def test_runtime_version_matches_pyproject() -> None:
