@@ -23,6 +23,10 @@ def test_balanced_profile_keeps_single_pass_transcription() -> None:
     assert options_for_profile("balanced").recover_gaps is False
 
 
+def test_profile_can_require_cached_or_local_model_files() -> None:
+    assert options_for_profile("balanced", local_files_only=True).local_files_only is True
+
+
 def test_blank_prompt_becomes_none() -> None:
     options = TranscriptionOptions(initial_prompt="   ")
     assert options.initial_prompt is None

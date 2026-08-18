@@ -48,6 +48,33 @@ def test_cuda_failure_detection_is_narrow() -> None:
     assert not _looks_like_cuda_failure(RuntimeError("unsupported media stream"))
 
 
+def test_model_loader_forwards_local_files_only_to_faster_whisper(monkeypatch) -> None:
+    calls: list[dict] = []
+
+    class FakeWhisperModel:
+        def __init__(self, _model_name: str, **kwargs) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "faster_whisper",
+        types.SimpleNamespace(WhisperModel=FakeWhisperModel),
+    )
+    engine = TranscriptionEngine(
+        TranscriptionOptions(device="cpu", local_files_only=True)
+    )
+
+    engine._load_model()
+
+    assert calls == [
+        {
+            "device": "cpu",
+            "compute_type": "int8",
+            "local_files_only": True,
+        }
+    ]
+
+
 def test_transcription_is_indeterminate_until_a_timed_segment_arrives(tmp_path) -> None:
     source = tmp_path / "clip.wav"
     source.touch()

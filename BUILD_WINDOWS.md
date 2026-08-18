@@ -4,7 +4,7 @@ CaptionMiner can be frozen into a portable **PyInstaller onedir** application. T
 
 This intentionally mirrors HighlightMiner's proven packaging layout. It is one application executable, but not a literal PyInstaller `--onefile` bundle. Native Qt and speech-recognition libraries remain in `_internal` so startup does not unpack hundreds of megabytes into a temporary folder every time, and failed DLL loading remains inspectable.
 
-The Whisper model itself is not embedded. CaptionMiner downloads the selected model into the normal user cache on first use and reuses it afterward.
+The Whisper model itself is not embedded. When the selected model is missing, CaptionMiner asks the user before connecting to Hugging Face. The user can download it into the normal user cache, choose a compatible local faster-whisper model folder, or refuse and change that saved choice later in Settings.
 
 ## Local build
 
@@ -30,19 +30,20 @@ CaptionMiner-v<version>-windows-x64.zip
 
 The required repository-root documents copied into every package are defined once in `tools\release_documents.py`. The local builder, Windows workflow, tests, and maintainer release tooling all consume that same manifest so the package checks cannot drift apart.
 
-For version `0.2.0`, the output is:
+For version `0.2.0-alpha.1`, the output is:
 
 ```text
 dist/
 ├── CaptionMiner/
 │   ├── CaptionMiner.exe
+│   ├── START_HERE.txt
 │   ├── README.md
 │   ├── BUILD_WINDOWS.md
 │   ├── ATTRIBUTIONS.md
 │   ├── SECURITY.md
 │   ├── LICENSE
 │   └── _internal/
-└── CaptionMiner-v0.2.0-windows-x64.zip
+└── CaptionMiner-v0.2.0-alpha.1-windows-x64.zip
 ```
 
 The script will:
@@ -115,9 +116,9 @@ The tracked `runtime\cuda\README.md` keeps the staging folder present in a norma
 
 ## Models and offline use
 
-PyInstaller packages the application, not Whisper model weights. On first selection, faster-whisper downloads `small`, `medium`, `large-v2`, or `large-v3` into the user's model cache. Model size would make embedding every profile both wasteful and misleading.
+PyInstaller packages the application, not Whisper model weights. When `small`, `medium`, `large-v2`, or `large-v3` is missing, the GUI asks for explicit consent before faster-whisper can download it into the user's model cache. The user can refuse, change that saved policy later, or choose a compatible local model folder. Model size would make embedding every profile both wasteful and misleading.
 
-Once a chosen model is cached, transcription can run without uploading media or downloading that model again. A new Windows account, cleaned cache, or different model selection can require another download.
+Once a chosen model is cached, CaptionMiner loads it with local-files-only behavior. Transcription can run without uploading media or downloading that model again. A new Windows account, cleaned cache, or different model selection can require another explicit decision.
 
 ## GitHub Actions build
 
@@ -141,7 +142,7 @@ The workflow artifact is temporary regression evidence, not an official CaptionM
 - Console: enabled during the alpha period for CLI use and useful crash output
 - Compression: UPX disabled
 - Architecture: Windows x64
-- Model weights: downloaded separately on first use
+- Model weights: downloaded only after consent or supplied as a validated local folder
 - Code signing: not configured
 
 A literal `--onefile` mode may be evaluated later, but it should only replace onedir if clean-machine testing demonstrates a real distribution benefit that outweighs slower startup and harder native-library diagnostics.

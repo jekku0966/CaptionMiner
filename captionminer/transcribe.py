@@ -276,6 +276,7 @@ class TranscriptionEngine:
                 self.options.model_name,
                 device=self.runtime.device,
                 compute_type=self.runtime.compute_type,
+                local_files_only=self.options.local_files_only,
             )
         except Exception as exc:
             if (
@@ -289,6 +290,7 @@ class TranscriptionEngine:
                     self.options.model_name,
                     device="cpu",
                     compute_type="int8",
+                    local_files_only=self.options.local_files_only,
                 )
             else:
                 raise
@@ -332,6 +334,7 @@ class TranscriptionEngine:
                     self.options.model_name,
                     device="cpu",
                     compute_type="int8",
+                    local_files_only=self.options.local_files_only,
                 )
                 return self._transcribe_once(self._model, source, progress=progress, cancel=cancel)
             raise

@@ -1,0 +1,119 @@
+CAPTIONMINER - QUICK START
+==========================
+
+WHAT IT DOES
+------------
+
+CaptionMiner turns spoken audio in a video or audio file into an SRT
+subtitle file.
+
+It does not change the original media file.
+It does not add subtitle styling.
+Your media is processed locally and is not uploaded.
+
+The SRT can be imported into:
+
+- DaVinci Resolve
+- Adobe Premiere Pro
+- CapCut Desktop
+
+
+WHAT TO DOWNLOAD
+----------------
+
+Download the Windows package named like this from the official CaptionMiner
+Releases page:
+
+CaptionMiner-v<version>-windows-x64.zip
+
+https://github.com/jekku0966/CaptionMiner/releases
+
+Do not download the files named "Source code" unless you want the programming
+source instead of the ready-to-use application.
+
+
+BEFORE STARTING
+---------------
+
+1. Extract the entire ZIP to a normal folder.
+2. Do not run CaptionMiner from inside the ZIP.
+3. Keep CaptionMiner.exe and the _internal folder together.
+4. Double-click CaptionMiner.exe.
+
+The ready-made Windows package does not require Python or a separate FFmpeg,
+CUDA Toolkit, or cuDNN installation. An NVIDIA GPU is optional. A current
+NVIDIA graphics driver is recommended when using one.
+
+CaptionMiner is not currently code-signed, so Windows may show a SmartScreen
+warning. Continue only if the ZIP came from the official Releases page above.
+
+
+CREATE SUBTITLES
+----------------
+
+1. Open CaptionMiner.exe.
+2. Drag one or more video or audio files into the window.
+3. Leave Accuracy profile on Balanced for normal use.
+4. Leave Spoken language on Auto-detect.
+5. Leave Processing device on Automatic.
+6. Leave Output folder empty to save each SRT beside its original file.
+7. Click Transcribe.
+
+Example result:
+
+my_video.mp4
+my_video.srt
+
+
+SPEECH-RECOGNITION MODELS
+-------------------------
+
+CaptionMiner needs a speech-recognition model. Models are not included in the
+normal download because they are large.
+
+If the selected model is not already on the computer, CaptionMiner asks before
+downloading it from Hugging Face. Nothing is downloaded before that choice.
+
+- Download model: download it once and reuse it later.
+- Choose local model folder: use a compatible model already on the computer.
+- No: disable automatic model downloads.
+
+If No was selected, use the Settings button to change the choice or select a
+local model folder later.
+
+Downloaded models are normally stored here:
+
+%USERPROFILE%\.cache\huggingface\hub
+
+They remain there if CaptionMiner is deleted. Deleting a model frees its disk
+space, but CaptionMiner must download it again before that profile can be used.
+Other programs may also use the Hugging Face cache, so do not delete the whole
+cache without checking its contents.
+
+
+USING THE SUBTITLES
+-------------------
+
+Import the video and matching SRT into Resolve, Premiere Pro, or CapCut. Place
+the subtitles at the same timeline start as that exact video file.
+
+Choose fonts, colors, size, position, and animation inside the video editor.
+CaptionMiner intentionally leaves styling to you.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+
+- Make sure the entire ZIP was extracted.
+- Keep CaptionMiner.exe beside the _internal folder.
+- Try the Balanced profile.
+- Leave Processing device on Automatic.
+- Make sure the original file contains audible speech.
+- A model download requires internet access unless a local model is supplied.
+
+Report problems here:
+
+https://github.com/jekku0966/CaptionMiner/issues
+
+Include the CaptionMiner version, Windows version, GPU model, selected profile,
+and the error shown in the CaptionMiner log.

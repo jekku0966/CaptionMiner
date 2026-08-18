@@ -71,6 +71,7 @@ class TranscriptionOptions:
     """Settings that affect recognition and plain subtitle cue generation."""
 
     model_name: str = "medium"
+    local_files_only: bool = False
     language: str | None = None
     device: str = "auto"
     beam_size: int = 5
@@ -120,6 +121,7 @@ def options_for_profile(
     device: str = "auto",
     initial_prompt: str | None = None,
     max_characters_per_cue: int = 84,
+    local_files_only: bool = False,
 ) -> TranscriptionOptions:
     """Build validated options from a public model profile."""
 
@@ -131,6 +133,7 @@ def options_for_profile(
 
     return TranscriptionOptions(
         model_name=selected.model_name,
+        local_files_only=local_files_only,
         language=language,
         device=device,
         initial_prompt=initial_prompt,

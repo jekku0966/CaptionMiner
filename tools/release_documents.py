@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import PurePosixPath, PureWindowsPath
 
 REQUIRED_RELEASE_DOCUMENTS = (
+    "START_HERE.txt",
     "README.md",
     "BUILD_WINDOWS.md",
     "ATTRIBUTIONS.md",

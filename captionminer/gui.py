@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
-from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent
+from PySide6.QtCore import QObject, QThread, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -31,6 +34,13 @@ from PySide6.QtWidgets import (
 
 from captionminer import __version__
 from captionminer.config import COMMON_LANGUAGES, MODEL_PROFILES, options_for_profile
+from captionminer.model_management import (
+    DownloadPolicy,
+    ModelPreferences,
+    ModelSelection,
+    huggingface_cache_directory,
+    resolve_installed_model,
+)
 from captionminer.pipeline import transcribe_to_srt
 from captionminer.progress import INDETERMINATE_PROGRESS, batch_progress_value, format_elapsed
 from captionminer.transcribe import TranscriptionCancelled, TranscriptionEngine
@@ -79,14 +89,21 @@ class BatchWorker(QObject):
         initial_prompt: str | None,
         output_directory: Path | None,
         overwrite: bool,
+        model_reference: str,
+        local_files_only: bool,
     ) -> None:
         super().__init__()
         self.files = files
-        self.options = options_for_profile(
+        base_options = options_for_profile(
             profile,
             language=language,
             device=device,
             initial_prompt=initial_prompt,
+        )
+        self.options = replace(
+            base_options,
+            model_name=model_reference,
+            local_files_only=local_files_only,
         )
         self.output_directory = output_directory
         self.overwrite = overwrite
@@ -154,8 +171,134 @@ class BatchWorker(QObject):
         self.cancel_event.set()
 
 
+class ModelSettingsDialog(QDialog):
+    """Small user-facing model and download-preference editor."""
+
+    def __init__(
+        self,
+        preferences: ModelPreferences,
+        parent: QWidget | None = None,
+        *,
+        initial_profile_key: str | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.preferences = preferences
+        self.setWindowTitle("CaptionMiner Settings")
+        self.resize(620, 330)
+
+        layout = QVBoxLayout(self)
+        explanation = QLabel(
+            "Choose what CaptionMiner should do when a selected speech-recognition "
+            "model is not already on this computer."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+
+        form = QFormLayout()
+        self.policy_combo = QComboBox()
+        self.policy_combo.addItem("Ask before downloading", DownloadPolicy.ASK)
+        self.policy_combo.addItem("Download automatically", DownloadPolicy.ALLOW)
+        self.policy_combo.addItem("Never download automatically", DownloadPolicy.DENY)
+        policy_index = self.policy_combo.findData(self.preferences.download_policy)
+        self.policy_combo.setCurrentIndex(max(0, policy_index))
+        form.addRow("When a model is missing", self.policy_combo)
+
+        self.profile_combo = QComboBox()
+        for profile in MODEL_PROFILES.values():
+            self.profile_combo.addItem(f"{profile.label} — {profile.model_name}", profile.key)
+        if initial_profile_key is not None:
+            profile_index = self.profile_combo.findData(initial_profile_key)
+            if profile_index >= 0:
+                self.profile_combo.setCurrentIndex(profile_index)
+        form.addRow("Model profile", self.profile_combo)
+        layout.addLayout(form)
+
+        self.model_status = QLabel()
+        self.model_status.setWordWrap(True)
+        layout.addWidget(self.model_status)
+
+        model_buttons = QHBoxLayout()
+        self.choose_local_button = QPushButton("Choose local model folder")
+        self.clear_local_button = QPushButton("Remove local selection")
+        self.open_cache_button = QPushButton("Open downloaded model folder")
+        model_buttons.addWidget(self.choose_local_button)
+        model_buttons.addWidget(self.clear_local_button)
+        model_buttons.addStretch(1)
+        model_buttons.addWidget(self.open_cache_button)
+        layout.addLayout(model_buttons)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.policy_combo.currentIndexChanged.connect(self._save_policy)
+        self.profile_combo.currentIndexChanged.connect(self._refresh_status)
+        self.choose_local_button.clicked.connect(self._choose_local_model)
+        self.clear_local_button.clicked.connect(self._clear_local_model)
+        self.open_cache_button.clicked.connect(self._open_cache)
+        self._refresh_status()
+
+    def _profile_key(self) -> str:
+        return str(self.profile_combo.currentData())
+
+    @Slot()
+    def _save_policy(self) -> None:
+        self.preferences.set_download_policy(self.policy_combo.currentData())
+
+    @Slot()
+    def _refresh_status(self) -> None:
+        profile_key = self._profile_key()
+        profile = MODEL_PROFILES[profile_key]
+        lookup = resolve_installed_model(profile_key, profile.model_name, self.preferences)
+        saved_path = self.preferences.local_model_path(profile_key)
+
+        if lookup.selection is not None and lookup.selection.source == "local":
+            text = f"Using local model folder:\n{lookup.selection.location}"
+        elif lookup.selection is not None:
+            text = f"Downloaded model found:\n{lookup.selection.location}"
+        elif lookup.invalid_local_reason:
+            text = f"Saved local model cannot be used:\n{lookup.invalid_local_reason}"
+        else:
+            text = "This model is not installed."
+
+        self.model_status.setText(text)
+        self.clear_local_button.setEnabled(saved_path is not None)
+
+    @Slot()
+    def _choose_local_model(self) -> None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "Choose a faster-whisper model folder",
+        )
+        if not selected:
+            return
+        try:
+            self.preferences.set_local_model_path(self._profile_key(), Path(selected))
+        except ValueError as exc:
+            QMessageBox.warning(self, "Invalid model folder", str(exc))
+            return
+        self._refresh_status()
+
+    @Slot()
+    def _clear_local_model(self) -> None:
+        self.preferences.clear_local_model_path(self._profile_key())
+        self._refresh_status()
+
+    @Slot()
+    def _open_cache(self) -> None:
+        cache = huggingface_cache_directory()
+        if not cache.is_dir():
+            QMessageBox.information(
+                self,
+                "Downloaded model folder",
+                f"No downloaded model folder exists yet.\n\nExpected location:\n{cache}",
+            )
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(cache)))
+
+
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, preferences: ModelPreferences | None = None) -> None:
         super().__init__()
         self.setWindowTitle(f"CaptionMiner {__version__}")
         self.resize(840, 670)
@@ -164,6 +307,7 @@ class MainWindow(QMainWindow):
         self._close_after_cancel = False
         self._batch_started_at: float | None = None
         self._status_message = "Ready"
+        self._model_preferences = preferences or ModelPreferences()
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(1000)
         self._status_timer.timeout.connect(self._refresh_status_label)
@@ -173,9 +317,14 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
 
+        heading_row = QHBoxLayout()
         heading = QLabel("CaptionMiner")
         heading.setStyleSheet("font-size: 24px; font-weight: 700;")
-        layout.addWidget(heading)
+        self.settings_button = QPushButton("Settings")
+        heading_row.addWidget(heading)
+        heading_row.addStretch(1)
+        heading_row.addWidget(self.settings_button)
+        layout.addLayout(heading_row)
         description = QLabel(
             "Drop exported clips below. CaptionMiner transcribes them locally and creates "
             "plain SRT subtitle files; styling remains in your video editor."
@@ -268,6 +417,7 @@ class MainWindow(QMainWindow):
         self.output_browse.clicked.connect(self.choose_output_directory)
         self.start_button.clicked.connect(self.start_batch)
         self.cancel_button.clicked.connect(self.cancel_batch)
+        self.settings_button.clicked.connect(self.open_settings)
 
     @Slot(list)
     def add_paths(self, paths: list[str]) -> None:
@@ -314,6 +464,7 @@ class MainWindow(QMainWindow):
             self.output_browse,
             self.overwrite_check,
             self.media_list,
+            self.settings_button,
         ):
             widget.setEnabled(not running)
         self.cancel_button.setEnabled(running)
@@ -357,6 +508,11 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "CaptionMiner", "The selected output path is not a folder.")
             return
 
+        profile_key = str(self.profile_combo.currentData())
+        model_selection = self._select_model_for_transcription(profile_key)
+        if model_selection is None:
+            return
+
         self.log.clear()
         self._batch_started_at = time.monotonic()
         self._set_progress_value(INDETERMINATE_PROGRESS)
@@ -373,6 +529,8 @@ class MainWindow(QMainWindow):
             initial_prompt=self.prompt_edit.text().strip() or None,
             output_directory=output_directory,
             overwrite=self.overwrite_check.isChecked(),
+            model_reference=model_selection.reference,
+            local_files_only=model_selection.local_files_only,
         )
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -383,6 +541,144 @@ class MainWindow(QMainWindow):
         self._thread.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
         self._thread.start()
+
+    def _select_model_for_transcription(self, profile_key: str) -> ModelSelection | None:
+        profile = MODEL_PROFILES[profile_key]
+
+        while True:
+            lookup = resolve_installed_model(
+                profile_key,
+                profile.model_name,
+                self._model_preferences,
+            )
+            if lookup.invalid_local_reason:
+                QMessageBox.warning(
+                    self,
+                    "Local model unavailable",
+                    lookup.invalid_local_reason
+                    + "\n\nThe saved local selection will be removed. You can choose it again "
+                    "after fixing the folder.",
+                )
+                self._model_preferences.clear_local_model_path(profile_key)
+                if lookup.selection is None:
+                    continue
+            if lookup.selection is not None:
+                return lookup.selection
+
+            policy = self._model_preferences.download_policy
+            if policy is DownloadPolicy.ALLOW:
+                return ModelSelection(
+                    reference=profile.model_name,
+                    location=huggingface_cache_directory(),
+                    source="download",
+                    local_files_only=False,
+                )
+            if policy is DownloadPolicy.DENY:
+                action = self._show_downloads_disabled(profile_key)
+                if action == "settings":
+                    self.open_settings()
+                    continue
+                if action == "local":
+                    selection = self._choose_local_model_for_profile(profile_key)
+                    if selection is not None:
+                        return selection
+                return None
+
+            action = self._ask_for_download_consent(profile_key)
+            if action == "download":
+                self._model_preferences.set_download_policy(DownloadPolicy.ALLOW)
+                return ModelSelection(
+                    reference=profile.model_name,
+                    location=huggingface_cache_directory(),
+                    source="download",
+                    local_files_only=False,
+                )
+            if action == "local":
+                selection = self._choose_local_model_for_profile(profile_key)
+                if selection is not None:
+                    return selection
+                return None
+            if action == "deny":
+                self._model_preferences.set_download_policy(DownloadPolicy.DENY)
+            return None
+
+    def _ask_for_download_consent(self, profile_key: str) -> str:
+        profile = MODEL_PROFILES[profile_key]
+        message = QMessageBox(self)
+        message.setIcon(QMessageBox.Question)
+        message.setWindowTitle("Speech-recognition model required")
+        message.setText(f"The {profile.label} model is not installed.")
+        message.setInformativeText(
+            "CaptionMiner can download it once from Hugging Face and reuse it later. "
+            "Your video or audio will not be uploaded.\n\n"
+            f"Model: {profile.model_name}\n"
+            f"Download location: {huggingface_cache_directory()}"
+        )
+        download_button = message.addButton("Download model", QMessageBox.AcceptRole)
+        local_button = message.addButton("Choose local model folder", QMessageBox.ActionRole)
+        deny_button = message.addButton("No", QMessageBox.RejectRole)
+        message.setDefaultButton(download_button)
+        message.exec()
+
+        clicked = message.clickedButton()
+        if clicked is download_button:
+            return "download"
+        if clicked is local_button:
+            return "local"
+        if clicked is deny_button:
+            return "deny"
+        return "cancel"
+
+    def _show_downloads_disabled(self, profile_key: str) -> str:
+        profile = MODEL_PROFILES[profile_key]
+        message = QMessageBox(self)
+        message.setIcon(QMessageBox.Information)
+        message.setWindowTitle("Model downloads are disabled")
+        message.setText(f"The {profile.label} model is not installed.")
+        message.setInformativeText(
+            "Choose a local model folder or change the model-download preference in Settings."
+        )
+        local_button = message.addButton("Choose local model folder", QMessageBox.ActionRole)
+        settings_button = message.addButton("Open Settings", QMessageBox.ActionRole)
+        cancel_button = message.addButton("Cancel", QMessageBox.RejectRole)
+        message.setDefaultButton(local_button)
+        message.exec()
+
+        clicked = message.clickedButton()
+        if clicked is local_button:
+            return "local"
+        if clicked is settings_button:
+            return "settings"
+        if clicked is cancel_button:
+            return "cancel"
+        return "cancel"
+
+    def _choose_local_model_for_profile(self, profile_key: str) -> ModelSelection | None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "Choose a faster-whisper model folder",
+        )
+        if not selected:
+            return None
+        try:
+            self._model_preferences.set_local_model_path(profile_key, Path(selected))
+        except ValueError as exc:
+            QMessageBox.warning(self, "Invalid model folder", str(exc))
+            return None
+        lookup = resolve_installed_model(
+            profile_key,
+            MODEL_PROFILES[profile_key].model_name,
+            self._model_preferences,
+        )
+        return lookup.selection
+
+    @Slot()
+    def open_settings(self) -> None:
+        ModelSettingsDialog(
+            self._model_preferences,
+            self,
+            initial_profile_key=str(self.profile_combo.currentData()),
+        ).exec()
 
     @Slot()
     def cancel_batch(self) -> None:

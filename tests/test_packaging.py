@@ -25,6 +25,7 @@ def test_release_document_manifest_contains_safe_unique_root_filenames() -> None
     assert len(REQUIRED_RELEASE_DOCUMENTS) == len(set(REQUIRED_RELEASE_DOCUMENTS))
     for document in REQUIRED_RELEASE_DOCUMENTS:
         assert Path(document).parts == (document,)
+    assert "START_HERE.txt" in REQUIRED_RELEASE_DOCUMENTS
 
 
 def test_release_document_cli_emits_the_shared_manifest(capsys) -> None:
