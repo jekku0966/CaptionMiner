@@ -6,6 +6,11 @@ import pytest
 
 from captionminer import __version__
 from tools.project_version import read_project_version
+from tools.release_documents import (
+    REQUIRED_RELEASE_DOCUMENTS,
+    main as print_release_documents,
+    validate_release_documents,
+)
 
 
 def test_runtime_version_matches_pyproject() -> None:
@@ -14,11 +19,34 @@ def test_runtime_version_matches_pyproject() -> None:
     assert __version__ == read_project_version(pyproject)
 
 
-def test_windows_builder_includes_required_release_documents() -> None:
-    builder = (Path(__file__).parents[1] / "build_windows.ps1").read_text(encoding="utf-8")
+def test_release_document_manifest_contains_safe_unique_root_filenames() -> None:
+    validate_release_documents()
 
-    for document in ("README.md", "BUILD_WINDOWS.md", "ATTRIBUTIONS.md", "SECURITY.md", "LICENSE"):
-        assert f'"{document}"' in builder
+    assert len(REQUIRED_RELEASE_DOCUMENTS) == len(set(REQUIRED_RELEASE_DOCUMENTS))
+    for document in REQUIRED_RELEASE_DOCUMENTS:
+        assert Path(document).parts == (document,)
+
+
+def test_release_document_cli_emits_the_shared_manifest(capsys) -> None:
+    assert print_release_documents() == 0
+    assert tuple(capsys.readouterr().out.splitlines()) == REQUIRED_RELEASE_DOCUMENTS
+
+
+@pytest.mark.parametrize(
+    "documents",
+    (
+        (),
+        ("README.md", "README.md"),
+        ("",),
+        ("docs/README.md",),
+        (r"docs\README.md",),
+        ("/README.md",),
+        (r"C:\README.md",),
+    ),
+)
+def test_release_document_manifest_rejects_invalid_names(documents: tuple[str, ...]) -> None:
+    with pytest.raises(ValueError):
+        validate_release_documents(documents)
 
 
 @pytest.mark.parametrize(

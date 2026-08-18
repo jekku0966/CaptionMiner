@@ -160,11 +160,17 @@ if (-not (Test-Path $ExePath)) {
 
 Write-Host ""
 Write-Host "Adding user-facing files..."
-foreach ($Name in @("README.md", "BUILD_WINDOWS.md", "ATTRIBUTIONS.md", "SECURITY.md", "LICENSE")) {
+$ReleaseDocumentsScript = Join-Path $RepoRoot "tools\release_documents.py"
+$ReleaseDocuments = @(& $BuildPython $ReleaseDocumentsScript)
+if ($LASTEXITCODE -ne 0 -or $ReleaseDocuments.Count -eq 0) {
+    throw "Could not read the required release documents from tools/release_documents.py."
+}
+foreach ($Name in $ReleaseDocuments) {
     $Source = Join-Path $RepoRoot $Name
-    if (Test-Path $Source) {
-        Copy-Item $Source (Join-Path $DistRoot $Name) -Force
+    if (-not (Test-Path $Source -PathType Leaf)) {
+        throw "Required release document is missing: $Name"
     }
+    Copy-Item $Source (Join-Path $DistRoot $Name) -Force
 }
 
 # Carry forward only explicitly supported CUDA 12 / cuDNN 9 files from the

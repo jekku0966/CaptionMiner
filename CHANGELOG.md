@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Kept conservative PyInstaller package collection until clean-machine CPU and CUDA validation establishes a safe minimal bundle.
 - Made the Windows builder recreate the local CUDA runtime staging directory automatically when it is missing.
 - Included `SECURITY.md` in portable Windows packages and verified the complete documentation set in packaging CI.
+- Centralized the Windows release-document manifest for the builder, CI workflow, and regression tests.
 
 ### Planned
 
