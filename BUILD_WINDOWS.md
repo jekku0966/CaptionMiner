@@ -46,14 +46,15 @@ The script will:
 
 1. Read and validate the project version.
 2. Require an x64 Windows build host.
-3. Create or reuse `.build-venv`, recreating it when its Python is unreadable or older than 3.10.
-4. Install CaptionMiner, development tools, and PyInstaller.
-5. Run Ruff and the complete unit test suite.
-6. Build `CaptionMiner.exe` using `CaptionMiner.spec`.
-7. Copy user-facing documentation and licensing files.
-8. Copy locally supplied CUDA/cuDNN DLLs when present.
-9. Smoke-test `CaptionMiner.exe --version` and `CaptionMiner.exe doctor`.
-10. Create the versioned portable ZIP.
+3. Ensure the local `runtime\cuda` staging directory exists.
+4. Create or reuse `.build-venv`, recreating it when its Python is unreadable or older than 3.10.
+5. Install CaptionMiner, development tools, and PyInstaller.
+6. Run Ruff and the complete unit test suite.
+7. Build `CaptionMiner.exe` using `CaptionMiner.spec`.
+8. Copy user-facing documentation and licensing files.
+9. Copy locally supplied CUDA/cuDNN DLLs when present.
+10. Smoke-test `CaptionMiner.exe --version` and `CaptionMiner.exe doctor`.
+11. Create the versioned portable ZIP.
 
 Useful switches:
 
@@ -88,7 +89,7 @@ No Python installation is needed to run the packaged folder. Do not separate `Ca
 
 The build always supports CPU transcription through CTranslate2 INT8. CUDA acceleration still requires compatible NVIDIA drivers and CUDA/cuDNN runtime libraries.
 
-The builder does not download or commit NVIDIA runtime binaries. To supply a portable runtime locally, create `runtime\cuda` under the repository root and place only the supported CUDA 12 / cuDNN 9 files there. The builder uses an exact allowlist and never sweeps arbitrary DLLs from the repository root.
+The builder does not download or commit NVIDIA runtime binaries. The repository already contains a documented `runtime\cuda` staging directory, and `build_windows.ps1` recreates it automatically if it is missing. Place only the supported CUDA 12 / cuDNN 9 files there before building. The builder uses an exact allowlist and never sweeps arbitrary DLLs from the repository root.
 
 The required allowlisted files are:
 
@@ -106,6 +107,8 @@ cudnn_ops64_9.dll
 ```
 
 `zlibwapi.dll` is optional and copied from the same directory when present. Files with any other name are ignored. If one or more required DLLs are absent, the script warns but does not fail. The resulting build remains usable on CPU and on systems where CTranslate2 can resolve a compatible CUDA runtime normally.
+
+The tracked `runtime\cuda\README.md` keeps the staging folder present in a normal clone while the repository-wide `*.dll` ignore rule prevents accidentally committing local NVIDIA binaries. If the folder is deleted, run the builder once and it will be restored before any packaging work begins.
 
 ## Models and offline use
 

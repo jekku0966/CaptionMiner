@@ -298,7 +298,7 @@ dist\CaptionMiner\CaptionMiner.exe
 dist\CaptionMiner-v0.1.0-windows-x64.zip
 ```
 
-Double-click `CaptionMiner.exe` to open the GUI. The folder's `_internal` directory must remain beside it. This is intentionally PyInstaller **onedir**, like HighlightMiner, instead of a literal `--onefile` package that extracts the Qt/CTranslate2 runtime on every launch. Optional locally supplied NVIDIA DLLs belong in `runtime\cuda`; the builder copies only its documented CUDA 12 / cuDNN 9 allowlist and does not sweep unrelated repository DLLs.
+Double-click `CaptionMiner.exe` to open the GUI. The folder's `_internal` directory must remain beside it. This is intentionally PyInstaller **onedir**, like HighlightMiner, instead of a literal `--onefile` package that extracts the Qt/CTranslate2 runtime on every launch. Optional locally supplied NVIDIA DLLs belong in the ready-made `runtime\cuda` staging folder; the builder recreates that folder if needed, copies only its documented CUDA 12 / cuDNN 9 allowlist, and does not sweep unrelated repository DLLs.
 
 The packaged app does not require Python. Whisper models are still downloaded into the normal user cache when first selected, and CUDA still requires a compatible NVIDIA runtime. See [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md) for the exact build contents, switches, CI artifact, CUDA behavior, and troubleshooting.
 
@@ -761,6 +761,9 @@ CaptionMiner/
 ├── tools/
 │   ├── __init__.py
 │   └── project_version.py
+├── runtime/
+│   └── cuda/
+│       └── README.md
 ├── ATTRIBUTIONS.md
 ├── BUILD_WINDOWS.md
 ├── CaptionMiner.spec

@@ -13,6 +13,15 @@ if ($HostArchitecture -ne "X64") {
     throw "CaptionMiner Windows packaging currently supports x64 only. Detected architecture: $HostArchitecture"
 }
 
+$CudaRuntimeRoot = Join-Path $RepoRoot "runtime\cuda"
+if (Test-Path -LiteralPath $CudaRuntimeRoot -PathType Leaf) {
+    throw "The CUDA runtime path exists as a file instead of a directory: $CudaRuntimeRoot"
+}
+if (-not (Test-Path -LiteralPath $CudaRuntimeRoot -PathType Container)) {
+    New-Item -ItemType Directory -Path $CudaRuntimeRoot -Force | Out-Null
+    Write-Host "Created local CUDA runtime directory: $CudaRuntimeRoot"
+}
+
 function Get-PythonVersionInfo {
     param(
         [Parameter(Mandatory = $true)]
@@ -160,7 +169,6 @@ foreach ($Name in @("README.md", "BUILD_WINDOWS.md", "ATTRIBUTIONS.md", "LICENSE
 
 # Carry forward only explicitly supported CUDA 12 / cuDNN 9 files from the
 # dedicated local runtime directory. CaptionMiner never downloads or commits them.
-$CudaRuntimeRoot = Join-Path $RepoRoot "runtime\cuda"
 $RequiredCudaDlls = @(
     "cublas64_12.dll",
     "cublasLt64_12.dll",

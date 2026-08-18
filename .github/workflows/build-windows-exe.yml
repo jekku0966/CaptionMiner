@@ -7,6 +7,7 @@ on:
       - "captionminer/**"
       - "tests/**"
       - "tools/**"
+      - "runtime/**"
       - "CaptionMiner.spec"
       - "build_windows.ps1"
       - "BUILD_WINDOWS.md"
@@ -18,6 +19,7 @@ on:
       - "captionminer/**"
       - "tests/**"
       - "tools/**"
+      - "runtime/**"
       - "CaptionMiner.spec"
       - "build_windows.ps1"
       - "BUILD_WINDOWS.md"
@@ -53,7 +55,14 @@ jobs:
 
       - name: Build portable application
         shell: powershell
-        run: .\build_windows.ps1
+        run: |
+          if (Test-Path ".\runtime\cuda") {
+            Remove-Item ".\runtime\cuda" -Recurse -Force
+          }
+          .\build_windows.ps1
+          if (-not (Test-Path ".\runtime\cuda" -PathType Container)) {
+            throw "The builder did not recreate runtime\cuda."
+          }
 
       - name: Verify frozen dependency imports
         shell: powershell
