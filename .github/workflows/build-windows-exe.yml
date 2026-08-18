@@ -81,6 +81,19 @@ jobs:
             }
           }
 
+      - name: Verify packaged documentation
+        shell: powershell
+        run: |
+          $requiredDocuments = @(python .\tools\release_documents.py)
+          if ($LASTEXITCODE -ne 0 -or $requiredDocuments.Count -eq 0) {
+            throw "Could not read the required release documents."
+          }
+          foreach ($required in $requiredDocuments) {
+            if (-not (Test-Path ".\dist\CaptionMiner\$required" -PathType Leaf)) {
+              throw "Packaged application is missing $required."
+            }
+          }
+
       - name: Smoke-test frozen PySide6 GUI
         shell: powershell
         run: |
