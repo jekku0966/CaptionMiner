@@ -72,7 +72,7 @@ CaptionMiner writes standard SubRip `.srt` files using:
 - CRLF line endings
 - monotonically ordered, non-overlapping cue times
 
-| Editor | SRT import | Manual CaptionMiner test | CaptionMiner target | Notes |
+| Editor | SRT import | Manual test (Windows) | CaptionMiner target | Notes |
 |---|---|---|---|---|
 | DaVinci Resolve | Yes | Passed on Windows | Plain subtitle track / transcription import | Match the subtitle and clip timeline start. |
 | Adobe Premiere Pro | Yes | Passed on Windows | Imported caption track | Import the SRT as media and place it in the sequence. |
@@ -82,7 +82,7 @@ CaptionMiner writes standard SubRip `.srt` files using:
 
 ### Manual desktop-editor validation
 
-On 2026-08-18, one real HighlightMiner-exported video and its CaptionMiner-generated SRT were imported manually into the user's installed Windows desktop copies of:
+In the initial desktop-editor validation pass, one real HighlightMiner-exported video and its CaptionMiner-generated SRT were imported manually into the user's installed Windows desktop copies of:
 
 - DaVinci Resolve
 - Adobe Premiere Pro
