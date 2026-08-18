@@ -28,6 +28,8 @@ The script reads `[project].version` from `pyproject.toml`. Its release archive 
 CaptionMiner-v<version>-windows-x64.zip
 ```
 
+The required repository-root documents copied into every package are defined once in `tools\release_documents.py`. The local builder, Windows workflow, tests, and maintainer release tooling all consume that same manifest so the package checks cannot drift apart.
+
 For version `0.2.0`, the output is:
 
 ```text

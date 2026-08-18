@@ -762,7 +762,8 @@ CaptionMiner/
 │   └── test_transcribe.py
 ├── tools/
 │   ├── __init__.py
-│   └── project_version.py
+│   ├── project_version.py
+│   └── release_documents.py
 ├── runtime/
 │   └── cuda/
 │       └── README.md
