@@ -125,6 +125,7 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 - **Atomic writes** — incomplete jobs do not leave a half-written SRT behind.
 - **CLI and desktop GUI** — automation and drag-and-drop workflows use the same core.
 - **Diagnostic command** — reports installed versions and CTranslate2/CUDA visibility.
+- **Local diagnostic logs** — always-on redacted Standard logging plus an explicitly selected one-batch Detailed mode, with strict rotation and no automatic upload.
 - **Repeatable Windows build** — PyInstaller produces one launchable EXE folder and a versioned portable ZIP.
 
 ---
@@ -401,6 +402,20 @@ Settings does not contain a second built-in-profile selector. It configures one 
 
 These small preferences use Qt's native per-user settings storage. On Windows, they are stored for the current user rather than in a `settings.json` beside the executable. Model weights remain in the Hugging Face cache or the manually selected folder and are never copied into the settings store.
 
+### Diagnostic logging
+
+Persistent diagnostics complement the existing on-screen activity log; they do not replace it. Open **Settings → Diagnostic logging** to use:
+
+- **Standard logging** — always enabled. Records app/session identity, GUI or CLI mode, batch/file lifecycle, media extension and duration, profile/language mode, safe model identity and source type, actual runtime, CUDA fallback, VAD/recovery state, language detection, recovery and cue counts, SRT-writing outcome, warnings, errors, elapsed time, and redacted tracebacks.
+- **Detailed diagnostics for next batch** — adds redacted settings, model-resolution decisions, stage timings, segment/timed-word counts, detected gap intervals, recovery windows, and subtitle-construction statistics. The choice is consumed when the next batch starts and automatically returns to Standard.
+- **Open log folder** — opens the current user's local CaptionMiner log directory.
+- **Copy diagnostic summary** — copies a short redacted session summary suitable for a support issue.
+- **Delete logs** — removes all current CaptionMiner diagnostic log files and immediately starts a fresh Standard log.
+
+Rotation is fixed and automatic: CaptionMiner keeps at most five Standard files of 1 MB each and two Detailed files of 5 MB each. Logs remain on the local computer and are never uploaded automatically.
+
+Persistent logs do not contain transcript or subtitle text, custom-vocabulary contents, complete media/output paths, local model paths, credentials, environment variables, or media contents. Diagnostic fields are centrally allowlisted. Tracebacks retain the exception type, chain, frame order, function name, line number, and source-file basename, while arbitrary exception and warning message bodies are omitted for privacy.
+
 ### Spoken language
 
 Auto-detection is convenient. Forcing the correct language can reduce ambiguity and skip detection work. The GUI contains common languages; the CLI accepts any language code supported by the model.
@@ -554,6 +569,15 @@ The flag applies only to that command and does not change the saved GUI preferen
 .\.venv\Scripts\python.exe -m captionminer transcribe "D:\Clips\clip.mp4" --overwrite
 ```
 
+### Capture Detailed diagnostics for one CLI batch
+
+```powershell
+.\.venv\Scripts\python.exe -m captionminer transcribe "D:\Clips\clip.mp4" `
+  --detailed-diagnostics
+```
+
+This does not enable Detailed mode permanently. Standard logging still runs alongside it.
+
 ### Run the experimental large-v3 profile
 
 ```powershell
@@ -665,6 +689,10 @@ CaptionMiner's application code:
 - does not include analytics or telemetry
 - does not call a paid transcription API
 - does not upload the source media
+- writes rotated, redacted diagnostic logs to the current user's local application-data area
+- never uploads diagnostic logs automatically
+
+Standard logs keep five files of at most 1 MB each. Optional Detailed diagnostics keep two files of at most 5 MB each. Transcript/subtitle text, custom-vocabulary contents, full media/output paths, local model paths, credentials, environment variables, and media contents are excluded from persistent diagnostics. The **Copy diagnostic summary** action is also redacted.
 
 Network access may still occur when Python packages or model files are downloaded. Dependencies and their hosting services have their own policies. Review and pin the environment if operating under formal privacy, compliance, or reproducibility requirements.
 
@@ -787,6 +815,7 @@ CaptionMiner/
 │   ├── __main__.py
 │   ├── cli.py
 │   ├── config.py
+│   ├── diagnostics.py
 │   ├── doctor.py
 │   ├── gui.py
 │   ├── model_management.py
@@ -799,6 +828,7 @@ CaptionMiner/
 ├── tests/
 │   ├── test_cli.py
 │   ├── test_config.py
+│   ├── test_diagnostics.py
 │   ├── test_model_management.py
 │   ├── test_output.py
 │   ├── test_packaging.py
@@ -895,6 +925,10 @@ The initial suite verifies:
 - focused-word filtering, confidence-based deduplication, and primary-word precedence
 - cancellation while recovery segments are being consumed
 - profile-specific single-pass versus gap-recovery behavior
+- one-shot Detailed-diagnostics preference consumption
+- Standard/Detailed size and file-count rotation
+- central removal of paths, prompts, credentials, transcript text, and unapproved fields
+- required Standard lifecycle/runtime/recovery/SRT events and Detailed timing/count events
 
 The deterministic tests verify recovery orchestration with fake model output. They do not prove general recognition accuracy. The first real-clip investigation is documented above, but a versioned media corpus with reference transcripts is still required for meaningful accuracy measurement.
 
