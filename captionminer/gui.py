@@ -28,12 +28,23 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
 
 from captionminer import __version__
-from captionminer.config import COMMON_LANGUAGES, MODEL_PROFILES, options_for_profile
+from captionminer.config import (
+    COMMON_LANGUAGES,
+    MODEL_PROFILES,
+    TranscriptionOptions,
+    options_for_profile,
+)
+from captionminer.diagnostics import (
+    BatchDiagnostics,
+    DiagnosticPreferences,
+    DiagnosticSession,
+)
 from captionminer.model_management import (
     CUSTOM_MODEL_KEY,
     DownloadConsentAction,
@@ -90,30 +101,17 @@ class BatchWorker(QObject):
         self,
         files: list[Path],
         *,
-        profile: str,
-        language: str | None,
-        device: str,
-        initial_prompt: str | None,
+        options: TranscriptionOptions,
         output_directory: Path | None,
         overwrite: bool,
-        model_reference: str,
-        local_files_only: bool,
+        diagnostics: BatchDiagnostics,
     ) -> None:
         super().__init__()
         self.files = files
-        base_options = options_for_profile(
-            profile,
-            language=language,
-            device=device,
-            initial_prompt=initial_prompt,
-        )
-        self.options = replace(
-            base_options,
-            model_name=model_reference,
-            local_files_only=local_files_only,
-        )
+        self.options = options
         self.output_directory = output_directory
         self.overwrite = overwrite
+        self.diagnostics = diagnostics
         self.cancel_event = threading.Event()
 
     @Slot()
@@ -127,6 +125,7 @@ class BatchWorker(QObject):
             if self.cancel_event.is_set():
                 break
             self.log.emit(f"[{file_index + 1}/{total}] {source}")
+            file_diagnostics = self.diagnostics.start_file(file_index + 1, source)
 
             def callback(
                 fraction: float | None,
@@ -146,8 +145,10 @@ class BatchWorker(QObject):
                     overwrite=self.overwrite,
                     progress=callback,
                     cancel=self.cancel_event.is_set,
+                    diagnostics=file_diagnostics,
                 )
                 completed += 1
+                file_diagnostics.finish("completed")
                 language = result.metadata.language or "unknown language"
                 recovery = (
                     f", recovered {result.metadata.recovered_word_count} word(s)"
@@ -159,10 +160,13 @@ class BatchWorker(QObject):
                     f"{result.metadata.device}{recovery})."
                 )
             except TranscriptionCancelled:
+                file_diagnostics.finish("cancelled")
                 self.log.emit("Cancellation requested; no partial SRT was written.")
                 break
             except Exception as exc:
                 failed += 1
+                file_diagnostics.log_exception("file_failed", exc, stage="pipeline")
+                file_diagnostics.finish("failed")
                 self.log.emit(f"ERROR: {source.name}: {exc}")
 
         cancelled = self.cancel_event.is_set()
@@ -171,10 +175,16 @@ class BatchWorker(QObject):
             100 if not cancelled else round(processed / total * 100),
             "Finished" if not cancelled else "Cancelled",
         )
+        self.diagnostics.finish(
+            completed_count=completed,
+            failed_count=failed,
+            cancelled=cancelled,
+        )
         self.completed.emit(completed, failed, cancelled)
 
     @Slot()
     def cancel(self) -> None:
+        self.diagnostics.record("cancellation_requested", level="warning")
         self.cancel_event.set()
 
 
@@ -184,13 +194,17 @@ class ModelSettingsDialog(QDialog):
     def __init__(
         self,
         preferences: ModelPreferences,
+        diagnostic_preferences: DiagnosticPreferences,
+        diagnostic_session: DiagnosticSession,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.preferences = preferences
+        self.diagnostic_preferences = diagnostic_preferences
+        self.diagnostic_session = diagnostic_session
         self.custom_model_changed = False
         self.setWindowTitle("CaptionMiner Settings")
-        self.resize(620, 330)
+        self.resize(680, 500)
 
         layout = QVBoxLayout(self)
         explanation = QLabel(
@@ -231,6 +245,35 @@ class ModelSettingsDialog(QDialog):
         model_buttons.addWidget(self.open_cache_button)
         layout.addLayout(model_buttons)
 
+        logging_box = QGroupBox("Diagnostic logging")
+        logging_layout = QVBoxLayout(logging_box)
+        self.standard_logging_radio = QRadioButton("Standard logging")
+        self.detailed_logging_radio = QRadioButton("Detailed diagnostics for next batch")
+        detailed_next = self.diagnostic_preferences.detailed_next_batch
+        self.detailed_logging_radio.setChecked(detailed_next)
+        self.standard_logging_radio.setChecked(not detailed_next)
+        logging_layout.addWidget(self.standard_logging_radio)
+        logging_layout.addWidget(self.detailed_logging_radio)
+
+        logging_explanation = QLabel(
+            "Standard logging is always local and always on. Detailed diagnostics adds "
+            "redacted timings and counts to the next batch only, then returns to Standard."
+        )
+        logging_explanation.setWordWrap(True)
+        logging_explanation.setProperty("role", "muted")
+        logging_layout.addWidget(logging_explanation)
+
+        logging_buttons = QHBoxLayout()
+        self.open_logs_button = QPushButton("Open log folder")
+        self.copy_summary_button = QPushButton("Copy diagnostic summary")
+        self.delete_logs_button = QPushButton("Delete logs")
+        logging_buttons.addWidget(self.open_logs_button)
+        logging_buttons.addWidget(self.copy_summary_button)
+        logging_buttons.addStretch(1)
+        logging_buttons.addWidget(self.delete_logs_button)
+        logging_layout.addLayout(logging_buttons)
+        layout.addWidget(logging_box)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -239,6 +282,10 @@ class ModelSettingsDialog(QDialog):
         self.choose_local_button.clicked.connect(self._choose_local_model)
         self.clear_local_button.clicked.connect(self._clear_local_model)
         self.open_cache_button.clicked.connect(self._open_cache)
+        self.detailed_logging_radio.toggled.connect(self._save_diagnostic_mode)
+        self.open_logs_button.clicked.connect(self._open_log_folder)
+        self.copy_summary_button.clicked.connect(self._copy_diagnostic_summary)
+        self.delete_logs_button.clicked.connect(self._delete_logs)
         self._refresh_status()
 
     @Slot()
@@ -278,6 +325,12 @@ class ModelSettingsDialog(QDialog):
         try:
             self.preferences.set_custom_model_path(Path(selected))
         except ValueError as exc:
+            self.diagnostic_session.log_exception(
+                "custom_model_validation_failed",
+                exc,
+                level="warning",
+                secrets=(selected,),
+            )
             QMessageBox.warning(self, "Invalid model folder", str(exc))
             return
         self.custom_model_changed = True
@@ -301,9 +354,58 @@ class ModelSettingsDialog(QDialog):
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(cache)))
 
+    @Slot(bool)
+    def _save_diagnostic_mode(self, detailed: bool) -> None:
+        self.diagnostic_preferences.set_detailed_next_batch(detailed)
+
+    @Slot()
+    def _open_log_folder(self) -> None:
+        try:
+            self.diagnostic_session.log_directory.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self.diagnostic_session.log_exception("log_folder_open_failed", exc)
+            QMessageBox.warning(self, "Diagnostic logs", "The local log folder could not open.")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.diagnostic_session.log_directory)))
+
+    @Slot()
+    def _copy_diagnostic_summary(self) -> None:
+        summary = self.diagnostic_session.summary(
+            detailed_next_batch=self.diagnostic_preferences.detailed_next_batch
+        )
+        QApplication.clipboard().setText(summary)
+        QMessageBox.information(
+            self,
+            "Diagnostic summary",
+            "A redacted diagnostic summary was copied to the clipboard.",
+        )
+
+    @Slot()
+    def _delete_logs(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Delete diagnostic logs",
+            "Delete all local CaptionMiner diagnostic logs? This cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        deleted = self.diagnostic_session.delete_logs()
+        QMessageBox.information(
+            self,
+            "Diagnostic logs",
+            f"Deleted {deleted} local diagnostic log file(s).",
+        )
+
 
 class MainWindow(QMainWindow):
-    def __init__(self, preferences: ModelPreferences | None = None) -> None:
+    def __init__(
+        self,
+        preferences: ModelPreferences | None = None,
+        diagnostic_preferences: DiagnosticPreferences | None = None,
+        diagnostic_session: DiagnosticSession | None = None,
+    ) -> None:
         super().__init__()
         self.setWindowTitle(f"CaptionMiner {__version__}")
         self.resize(840, 670)
@@ -313,6 +415,8 @@ class MainWindow(QMainWindow):
         self._batch_started_at: float | None = None
         self._status_message = "Ready"
         self._model_preferences = preferences or ModelPreferences()
+        self._diagnostic_preferences = diagnostic_preferences or DiagnosticPreferences()
+        self._diagnostic_session = diagnostic_session or DiagnosticSession("gui")
         self._last_standard_profile_key = CUSTOM_MODEL_BASE_PROFILE
         self._opening_settings = False
         self._status_timer = QTimer(self)
@@ -572,6 +676,11 @@ class MainWindow(QMainWindow):
             and output_directory.exists()
             and not output_directory.is_dir()
         ):
+            self._diagnostic_session.record(
+                "output_directory_validation_failed",
+                level="warning",
+                reason="selected_output_is_not_a_directory",
+            )
             QMessageBox.warning(self, "CaptionMiner", "The selected output path is not a folder.")
             return
 
@@ -587,6 +696,46 @@ class MainWindow(QMainWindow):
         if str(self.profile_combo.currentData()) == CUSTOM_MODEL_KEY:
             worker_profile_key = CUSTOM_MODEL_BASE_PROFILE
 
+        prompt = self.prompt_edit.text().strip() or None
+        base_options = options_for_profile(
+            worker_profile_key,
+            language=self.language_combo.currentData(),
+            device=str(self.device_combo.currentData()),
+            initial_prompt=prompt,
+        )
+        options = replace(
+            base_options,
+            model_name=model_selection.reference,
+            local_files_only=model_selection.local_files_only,
+        )
+        detailed = self._diagnostic_preferences.consume_detailed_next_batch()
+        language_mode = self.language_combo.currentData() or "auto"
+        diagnostic_secrets = (
+            [str(output_directory), str(output_directory.resolve())]
+            if output_directory is not None
+            else []
+        )
+        batch_diagnostics = self._diagnostic_session.start_batch(
+            profile=str(self.profile_combo.currentData()),
+            language_mode=str(language_mode),
+            total_files=len(files),
+            options=options,
+            detailed=detailed,
+            secrets=diagnostic_secrets,
+            overwrite=self.overwrite_check.isChecked(),
+            output_directory_selected=output_directory is not None,
+        )
+        decision = {
+            "cache": "existing_downloaded_model",
+            "download": "user_authorized_download",
+            "local": "custom_local_model",
+        }.get(model_selection.source, "resolved_model")
+        batch_diagnostics.model_resolved(
+            model_selection.reference,
+            model_selection.source,
+            decision,
+        )
+
         self.log.clear()
         self._batch_started_at = time.monotonic()
         self._set_progress_value(INDETERMINATE_PROGRESS)
@@ -597,14 +746,10 @@ class MainWindow(QMainWindow):
         self._thread = QThread(self)
         self._worker = BatchWorker(
             files,
-            profile=worker_profile_key,
-            language=self.language_combo.currentData(),
-            device=str(self.device_combo.currentData()),
-            initial_prompt=self.prompt_edit.text().strip() or None,
+            options=options,
             output_directory=output_directory,
             overwrite=self.overwrite_check.isChecked(),
-            model_reference=model_selection.reference,
-            local_files_only=model_selection.local_files_only,
+            diagnostics=batch_diagnostics,
         )
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -665,6 +810,11 @@ class MainWindow(QMainWindow):
     def _select_custom_model_for_transcription(self) -> ModelSelection | None:
         lookup = resolve_custom_model(self._model_preferences)
         if lookup.invalid_local_reason:
+            self._diagnostic_session.record(
+                "custom_model_unavailable",
+                level="warning",
+                reason="saved_custom_model_failed_validation",
+            )
             QMessageBox.warning(
                 self,
                 "Custom model unavailable",
@@ -749,6 +899,12 @@ class MainWindow(QMainWindow):
         try:
             self._model_preferences.set_custom_model_path(Path(selected))
         except ValueError as exc:
+            self._diagnostic_session.log_exception(
+                "custom_model_validation_failed",
+                exc,
+                level="warning",
+                secrets=(selected,),
+            )
             QMessageBox.warning(self, "Invalid model folder", str(exc))
             return None
         self._refresh_custom_profile_item()
@@ -762,7 +918,12 @@ class MainWindow(QMainWindow):
             return
         self._opening_settings = True
         try:
-            dialog = ModelSettingsDialog(self._model_preferences, self)
+            dialog = ModelSettingsDialog(
+                self._model_preferences,
+                self._diagnostic_preferences,
+                self._diagnostic_session,
+                self,
+            )
             dialog.exec()
         finally:
             self._opening_settings = False
@@ -826,10 +987,18 @@ class MainWindow(QMainWindow):
 
 
 def run_gui() -> int:
-    app = QApplication.instance() or QApplication([])
-    app.setApplicationName("CaptionMiner")
-    app.setOrganizationName("CaptionMiner")
-    apply_miner_theme(app)
-    window = MainWindow()
-    window.show()
-    return app.exec()
+    diagnostic_session = DiagnosticSession("gui")
+    diagnostic_session.install_exception_hooks()
+    try:
+        app = QApplication.instance() or QApplication([])
+        app.setApplicationName("CaptionMiner")
+        app.setOrganizationName("CaptionMiner")
+        apply_miner_theme(app)
+        window = MainWindow(diagnostic_session=diagnostic_session)
+        window.show()
+        return app.exec()
+    except Exception as exc:
+        diagnostic_session.log_exception("gui_failed", exc)
+        raise
+    finally:
+        diagnostic_session.close()

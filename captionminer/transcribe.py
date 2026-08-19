@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import math
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from captionminer.config import TranscriptionOptions
 from captionminer.models import (
@@ -18,6 +19,9 @@ from captionminer.models import (
     WordTimestamp,
 )
 from captionminer.subtitles import cues_from_segments, cues_from_words
+
+if TYPE_CHECKING:
+    from captionminer.diagnostics import FileDiagnostics
 
 ProgressCallback = Callable[[float | None, str], None]
 CancelCheck = Callable[[], bool]
@@ -212,13 +216,11 @@ def _recovery_kwargs(
     }
 
 
-def resolve_runtime(device: str) -> RuntimeSelection:
-    """Resolve ``auto`` without importing the heavyweight Whisper model."""
-
+def _resolve_runtime(device: str) -> tuple[RuntimeSelection, BaseException | None]:
     if device == "cpu":
-        return RuntimeSelection(device="cpu", compute_type="int8")
+        return RuntimeSelection(device="cpu", compute_type="int8"), None
     if device == "cuda":
-        return RuntimeSelection(device="cuda", compute_type="float16")
+        return RuntimeSelection(device="cuda", compute_type="float16"), None
     if device != "auto":
         raise ValueError("device must be one of: auto, cuda, cpu")
 
@@ -226,10 +228,17 @@ def resolve_runtime(device: str) -> RuntimeSelection:
         import ctranslate2
 
         if ctranslate2.get_cuda_device_count() > 0:
-            return RuntimeSelection(device="cuda", compute_type="float16")
-    except Exception:
-        pass
-    return RuntimeSelection(device="cpu", compute_type="int8")
+            return RuntimeSelection(device="cuda", compute_type="float16"), None
+    except Exception as exc:
+        return RuntimeSelection(device="cpu", compute_type="int8"), exc
+    return RuntimeSelection(device="cpu", compute_type="int8"), None
+
+
+def resolve_runtime(device: str) -> RuntimeSelection:
+    """Resolve ``auto`` without importing the heavyweight Whisper model."""
+
+    runtime, _probe_error = _resolve_runtime(device)
+    return runtime
 
 
 def _looks_like_cuda_failure(error: BaseException) -> bool:
@@ -251,13 +260,40 @@ class TranscriptionEngine:
 
     def __init__(self, options: TranscriptionOptions) -> None:
         self.options = options
-        self.runtime = resolve_runtime(options.device)
+        self.runtime, self._runtime_probe_error = _resolve_runtime(options.device)
         self._model: Any | None = None
 
-    def _load_model(self, callback: ProgressCallback | None = None) -> Any:
+    def _load_model(
+        self,
+        callback: ProgressCallback | None = None,
+        diagnostics: FileDiagnostics | None = None,
+    ) -> Any:
+        if diagnostics is not None and self._runtime_probe_error is not None:
+            diagnostics.log_exception(
+                "cuda_detection_failed",
+                self._runtime_probe_error,
+                level="warning",
+                stage="runtime_resolution",
+            )
+            diagnostics.record(
+                "runtime_fallback",
+                device="cpu",
+                compute_type="int8",
+                fallback_device="cpu",
+                reason="cuda_availability_check_failed",
+            )
+            self._runtime_probe_error = None
         if self._model is not None:
+            if diagnostics is not None:
+                diagnostics.record(
+                    "runtime_ready",
+                    device=self.runtime.device,
+                    compute_type=self.runtime.compute_type,
+                    model_reused=True,
+                )
             return self._model
 
+        load_started = time.perf_counter()
         _notify(
             callback,
             None,
@@ -279,13 +315,28 @@ class TranscriptionEngine:
                 local_files_only=self.options.local_files_only,
             )
         except Exception as exc:
-            if (
-                self.options.device == "auto"
-                and self.runtime.device == "cuda"
-                and _looks_like_cuda_failure(exc)
-            ):
+            cuda_failure = _looks_like_cuda_failure(exc)
+            will_fallback = (
+                self.options.device == "auto" and self.runtime.device == "cuda" and cuda_failure
+            )
+            if diagnostics is not None and cuda_failure:
+                diagnostics.log_exception(
+                    "cuda_initialization_failed",
+                    exc,
+                    level="warning" if will_fallback else "error",
+                    stage="model_load",
+                )
+            if will_fallback:
                 _notify(callback, None, f"CUDA could not initialize ({exc}); using CPU instead.")
                 self.runtime = RuntimeSelection(device="cpu", compute_type="int8")
+                if diagnostics is not None:
+                    diagnostics.record(
+                        "runtime_fallback",
+                        device="cpu",
+                        compute_type="int8",
+                        fallback_device="cpu",
+                        reason="cuda_initialization_failed",
+                    )
                 self._model = WhisperModel(
                     self.options.model_name,
                     device="cpu",
@@ -294,6 +345,14 @@ class TranscriptionEngine:
                 )
             else:
                 raise
+        if diagnostics is not None:
+            diagnostics.stage_timing("model_load", load_started)
+            diagnostics.record(
+                "runtime_ready",
+                device=self.runtime.device,
+                compute_type=self.runtime.compute_type,
+                model_reused=False,
+            )
         return self._model
 
     def transcribe(
@@ -302,6 +361,7 @@ class TranscriptionEngine:
         *,
         progress: ProgressCallback | None = None,
         cancel: CancelCheck | None = None,
+        diagnostics: FileDiagnostics | None = None,
     ) -> TranscriptionResult:
         """Transcribe one local media file and return editor-neutral cues."""
 
@@ -311,17 +371,30 @@ class TranscriptionEngine:
         if _cancelled(cancel):
             raise TranscriptionCancelled("transcription cancelled")
 
-        model = self._load_model(progress)
+        model = self._load_model(progress, diagnostics)
         try:
-            return self._transcribe_once(model, source, progress=progress, cancel=cancel)
+            return self._transcribe_once(
+                model,
+                source,
+                progress=progress,
+                cancel=cancel,
+                diagnostics=diagnostics,
+            )
         except Exception as exc:
             if isinstance(exc, (TranscriptionCancelled, NoSpeechDetected)):
                 raise
-            if (
-                self.options.device == "auto"
-                and self.runtime.device == "cuda"
-                and _looks_like_cuda_failure(exc)
-            ):
+            cuda_failure = _looks_like_cuda_failure(exc)
+            will_fallback = (
+                self.options.device == "auto" and self.runtime.device == "cuda" and cuda_failure
+            )
+            if diagnostics is not None and cuda_failure:
+                diagnostics.log_exception(
+                    "cuda_transcription_failed",
+                    exc,
+                    level="warning" if will_fallback else "error",
+                    stage="transcription",
+                )
+            if will_fallback:
                 _notify(
                     progress,
                     None,
@@ -330,13 +403,27 @@ class TranscriptionEngine:
                 from faster_whisper import WhisperModel
 
                 self.runtime = RuntimeSelection(device="cpu", compute_type="int8")
+                if diagnostics is not None:
+                    diagnostics.record(
+                        "runtime_fallback",
+                        device="cpu",
+                        compute_type="int8",
+                        fallback_device="cpu",
+                        reason="cuda_transcription_failed",
+                    )
                 self._model = WhisperModel(
                     self.options.model_name,
                     device="cpu",
                     compute_type="int8",
                     local_files_only=self.options.local_files_only,
                 )
-                return self._transcribe_once(self._model, source, progress=progress, cancel=cancel)
+                return self._transcribe_once(
+                    self._model,
+                    source,
+                    progress=progress,
+                    cancel=cancel,
+                    diagnostics=diagnostics,
+                )
             raise
 
     def _transcribe_once(
@@ -346,7 +433,17 @@ class TranscriptionEngine:
         *,
         progress: ProgressCallback | None,
         cancel: CancelCheck | None,
+        diagnostics: FileDiagnostics | None = None,
     ) -> TranscriptionResult:
+        transcription_started = time.perf_counter()
+        if diagnostics is not None:
+            diagnostics.record(
+                "transcription_started",
+                vad_enabled=self.options.vad_filter,
+                recovery_enabled=self.options.recover_gaps,
+                device=self.runtime.device,
+                compute_type=self.runtime.compute_type,
+            )
         _notify(progress, None, f"Analyzing audio and preparing {source.name}...")
         kwargs: dict[str, Any] = {
             "language": self.options.language,
@@ -358,12 +455,22 @@ class TranscriptionEngine:
         if self.options.vad_filter:
             kwargs["vad_parameters"] = {"min_silence_duration_ms": self.options.vad_min_silence_ms}
 
+        primary_started = time.perf_counter()
         segments, info = model.transcribe(str(source), **kwargs)
         duration = _safe_float(getattr(info, "duration", None))
         detected_language = getattr(info, "language", None)
+        probability = _safe_float(getattr(info, "language_probability", None))
+        if diagnostics is not None:
+            diagnostics.record("media_analyzed", duration_seconds=duration)
+            diagnostics.record(
+                "language_detected",
+                detected_language=str(detected_language) if detected_language else None,
+                language_probability=probability,
+            )
         _notify(progress, None, f"Transcribing {source.name}; waiting for timed speech...")
         words: list[WordTimestamp] = []
         fallback_segments: list[SourceSegment] = []
+        segment_count = 0
         for segment in segments:
             if _cancelled(cancel):
                 raise TranscriptionCancelled("transcription cancelled")
@@ -372,6 +479,7 @@ class TranscriptionEngine:
             end = float(getattr(segment, "end", start))
             text = str(getattr(segment, "text", ""))
             fallback_segments.append(SourceSegment(start=start, end=end, text=text))
+            segment_count += 1
 
             segment_words = getattr(segment, "words", None) or ()
             for word in segment_words:
@@ -393,11 +501,22 @@ class TranscriptionEngine:
                 message = f"Transcribing {source.name}..."
             _notify(progress, fraction, message)
 
+        if diagnostics is not None:
+            diagnostics.detail(
+                "primary_pass_statistics",
+                segment_count=segment_count,
+                timed_word_count=len(words),
+            )
+            diagnostics.stage_timing("primary_transcription", primary_started)
+
         if _cancelled(cancel):
             raise TranscriptionCancelled("transcription cancelled")
 
         recovered_count = 0
+        gap_count = 0
+        recovery_window_count = 0
         if self.options.recover_gaps and (words or not fallback_segments):
+            recovery_started = time.perf_counter()
             gaps = _find_recovery_gaps(
                 words,
                 duration=duration,
@@ -410,6 +529,30 @@ class TranscriptionEngine:
                 overlap_seconds=self.options.recovery_overlap_seconds,
                 context_seconds=self.options.recovery_context_seconds,
             )
+            gap_count = len(gaps)
+            recovery_window_count = len(windows)
+            if diagnostics is not None:
+                diagnostics.detail(
+                    "recovery_plan",
+                    gap_count=gap_count,
+                    recovery_window_count=recovery_window_count,
+                )
+                for gap_index, (gap_start, gap_end) in enumerate(gaps, start=1):
+                    diagnostics.detail(
+                        "detected_gap",
+                        gap_index=gap_index,
+                        gap_start_seconds=gap_start,
+                        gap_end_seconds=gap_end,
+                    )
+                for window_index, window in enumerate(windows, start=1):
+                    diagnostics.detail(
+                        "recovery_window",
+                        recovery_window_index=window_index,
+                        gap_start_seconds=window.gap_start,
+                        gap_end_seconds=window.gap_end,
+                        window_start_seconds=window.start,
+                        window_end_seconds=window.end,
+                    )
             if windows:
                 _notify(
                     progress,
@@ -417,12 +560,16 @@ class TranscriptionEngine:
                     f"Checking {len(gaps)} possible speech gap(s) in {source.name}...",
                 )
                 recovered_words: list[WordTimestamp] = []
+                recovery_segment_count = 0
                 recovery_language = self.options.language or (
                     str(detected_language) if detected_language else None
                 )
                 for index, window in enumerate(windows):
                     if _cancelled(cancel):
                         raise TranscriptionCancelled("transcription cancelled")
+                    window_started = time.perf_counter()
+                    window_segment_count = 0
+                    window_word_count = 0
 
                     progress_span = _RECOVERY_PROGRESS_END - _RECOVERY_PROGRESS_START
                     window_progress = _RECOVERY_PROGRESS_START + progress_span * (
@@ -443,6 +590,8 @@ class TranscriptionEngine:
                         ),
                     )
                     for segment in recovery_segments:
+                        recovery_segment_count += 1
+                        window_segment_count += 1
                         if _cancelled(cancel):
                             raise TranscriptionCancelled("transcription cancelled")
                         for word in getattr(segment, "words", None) or ():
@@ -452,6 +601,16 @@ class TranscriptionEngine:
                             midpoint = (parsed_word.start + parsed_word.end) / 2
                             if window.gap_start <= midpoint <= window.gap_end:
                                 recovered_words.append(parsed_word)
+                                window_word_count += 1
+
+                    if diagnostics is not None:
+                        diagnostics.detail(
+                            "recovery_window_statistics",
+                            recovery_window_index=index + 1,
+                            segment_count=window_segment_count,
+                            timed_word_count=window_word_count,
+                            elapsed_seconds=time.perf_counter() - window_started,
+                        )
 
                     completed_progress = _RECOVERY_PROGRESS_START + progress_span * (
                         (index + 1) / len(windows)
@@ -459,13 +618,20 @@ class TranscriptionEngine:
                     _notify(
                         progress,
                         completed_progress,
-                        f"Checked recovery window {index + 1}/{len(windows)} "
-                        f"for {source.name}...",
+                        f"Checked recovery window {index + 1}/{len(windows)} for {source.name}...",
                     )
 
                 primary_word_count = len(words)
                 words = _merge_word_timelines(words, recovered_words)
                 recovered_count = len(words) - primary_word_count
+                if diagnostics is not None:
+                    diagnostics.detail(
+                        "recovery_pass_statistics",
+                        segment_count=recovery_segment_count,
+                        timed_word_count=len(recovered_words),
+                        primary_word_count=primary_word_count,
+                        recovered_candidate_word_count=len(recovered_words),
+                    )
                 _notify(
                     progress,
                     _RECOVERY_PROGRESS_END,
@@ -477,7 +643,25 @@ class TranscriptionEngine:
                     _RECOVERY_PROGRESS_END,
                     f"No large transcript gaps found in {source.name}.",
                 )
+            if diagnostics is not None:
+                diagnostics.record(
+                    "recovery_completed",
+                    recovery_enabled=True,
+                    gap_count=gap_count,
+                    recovery_window_count=recovery_window_count,
+                    recovered_word_count=recovered_count,
+                )
+                diagnostics.stage_timing("gap_recovery", recovery_started)
+        elif diagnostics is not None:
+            diagnostics.record(
+                "recovery_completed",
+                recovery_enabled=self.options.recover_gaps,
+                gap_count=0,
+                recovery_window_count=0,
+                recovered_word_count=0,
+            )
 
+        subtitle_started = time.perf_counter()
         if words:
             cues = cues_from_words(
                 words,
@@ -488,10 +672,27 @@ class TranscriptionEngine:
         else:
             cues = cues_from_segments(fallback_segments)
 
+        if diagnostics is not None:
+            diagnostics.record(
+                "subtitles_constructed",
+                cue_count=len(cues),
+                subtitle_source="timed_words" if words else "segments",
+            )
+            diagnostics.detail(
+                "subtitle_construction_statistics",
+                cue_count=len(cues),
+                subtitle_source="timed_words" if words else "segments",
+                segment_count=len(fallback_segments),
+                timed_word_count=len(words),
+                recovered_word_count=recovered_count,
+            )
+            diagnostics.stage_timing("subtitle_construction", subtitle_started)
+
         if not cues:
             raise NoSpeechDetected(f"no speech was detected in {source.name}")
 
-        probability = _safe_float(getattr(info, "language_probability", None))
+        if diagnostics is not None:
+            diagnostics.stage_timing("transcription_total", transcription_started)
         metadata = TranscriptionMetadata(
             language=str(detected_language) if detected_language else None,
             language_probability=probability,

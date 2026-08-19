@@ -168,11 +168,11 @@ QPushButton[primary="true"]:hover {
     border-color: #F2B84B;
 }
 
-QCheckBox {
+QCheckBox, QRadioButton {
     spacing: 7px;
 }
 
-QCheckBox::indicator {
+QCheckBox::indicator, QRadioButton::indicator {
     width: 16px;
     height: 16px;
 }
