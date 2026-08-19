@@ -391,7 +391,7 @@ Selects the model and recovery behavior described in [Model profiles](#model-pro
 
 The **Settings** button controls what happens when a selected model is missing:
 
-- **Ask before downloading** — the default; no download starts until the consent dialog is accepted.
+- **Ask before downloading** — the default; no download starts until the consent dialog is accepted. Accepting approves that model download once and keeps this setting selected.
 - **Download automatically** — permit future missing profile models to download without another prompt.
 - **Never download automatically** — prevent model downloads until this preference is changed.
 
@@ -634,7 +634,7 @@ No fixed speed number is promised for the current alpha because no standardized 
 
 ## First-run model download and offline use
 
-When a model name such as `medium`, `large-v2`, or experimental `large-v3` is selected for the first time, the GUI asks for permission before faster-whisper downloads the compatible model from Hugging Face Hub. Choosing **No** stores that refusal, prevents the transcription from starting, and can be changed later through **Settings**. CaptionMiner does not host or proxy these model files.
+When a model name such as `medium`, `large-v2`, or experimental `large-v3` is selected for the first time, the GUI asks for permission before faster-whisper downloads the compatible model from Hugging Face Hub. Choosing **Download model** authorizes only that requested download and does not silently enable future automatic downloads. Choosing **No** stores that refusal, prevents the transcription from starting, and can be changed later through **Settings**. Permanent automatic downloads are enabled only when the user explicitly selects **Download automatically** in Settings. CaptionMiner does not host or proxy these model files.
 
 The default Windows cache location is:
 

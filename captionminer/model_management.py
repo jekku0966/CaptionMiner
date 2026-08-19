@@ -19,6 +19,23 @@ class DownloadPolicy(str, Enum):
     DENY = "deny"
 
 
+class DownloadConsentAction(str, Enum):
+    """Choice made in the missing-model consent prompt."""
+
+    DOWNLOAD = "download"
+    LOCAL = "local"
+    DENY = "deny"
+    CANCEL = "cancel"
+
+
+@dataclass(frozen=True, slots=True)
+class DownloadConsentEffect:
+    """Immediate action authorized by one consent-prompt response."""
+
+    allow_once: bool = False
+    choose_local: bool = False
+
+
 class SettingsBackend(Protocol):
     """Small subset shared by QSettings and the in-memory test backend."""
 
@@ -80,6 +97,21 @@ class ModelPreferences:
         if not re.fullmatch(r"[a-z0-9_-]+", profile_key):
             raise ValueError(f"invalid model profile key: {profile_key!r}")
         return f"{cls._LOCAL_MODEL_PREFIX}{profile_key}"
+
+
+def apply_download_consent_action(
+    preferences: ModelPreferences,
+    action: DownloadConsentAction,
+) -> DownloadConsentEffect:
+    """Apply a prompt choice without turning one approval into a global opt-in."""
+
+    if action is DownloadConsentAction.DOWNLOAD:
+        return DownloadConsentEffect(allow_once=True)
+    if action is DownloadConsentAction.LOCAL:
+        return DownloadConsentEffect(choose_local=True)
+    if action is DownloadConsentAction.DENY:
+        preferences.set_download_policy(DownloadPolicy.DENY)
+    return DownloadConsentEffect()
 
 
 _REQUIRED_LOCAL_MODEL_FILES = (

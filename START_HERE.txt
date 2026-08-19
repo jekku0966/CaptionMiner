@@ -74,12 +74,16 @@ normal download because they are large.
 If the selected model is not already on the computer, CaptionMiner asks before
 downloading it from Hugging Face. Nothing is downloaded before that choice.
 
-- Download model: download it once and reuse it later.
+- Download model: approve this download once and reuse the model later. This does
+  not enable automatic downloads for other missing models.
 - Choose local model folder: use a compatible model already on the computer.
 - No: disable automatic model downloads.
 
 If No was selected, use the Settings button to change the choice or select a
 local model folder later.
+
+Automatic downloads are enabled only by explicitly selecting Download
+automatically in Settings.
 
 Downloaded models are normally stored here:
 

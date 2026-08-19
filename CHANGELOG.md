@@ -4,6 +4,12 @@ All notable CaptionMiner changes will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to use [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once compatibility expectations stabilize.
 
+## [Unreleased]
+
+### Fixed
+
+- Kept one-time model-download approval from silently enabling automatic downloads for future missing models.
+
 ## [0.2.0-alpha.1] - 2026-08-18
 
 ### Added
