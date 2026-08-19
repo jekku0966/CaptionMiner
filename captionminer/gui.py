@@ -629,7 +629,7 @@ class MainWindow(QMainWindow):
             return DownloadConsentAction.LOCAL
         if clicked is deny_button:
             return DownloadConsentAction.DENY
-        return DownloadConsentAction.CANCEL
+        return DownloadConsentAction.DISMISS
 
     def _show_downloads_disabled(self, profile_key: str) -> str:
         profile = MODEL_PROFILES[profile_key]

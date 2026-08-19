@@ -25,7 +25,7 @@ class DownloadConsentAction(str, Enum):
     DOWNLOAD = "download"
     LOCAL = "local"
     DENY = "deny"
-    CANCEL = "cancel"
+    DISMISS = "dismiss"
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,7 +111,10 @@ def apply_download_consent_action(
         return DownloadConsentEffect(choose_local=True)
     if action is DownloadConsentAction.DENY:
         preferences.set_download_policy(DownloadPolicy.DENY)
-    return DownloadConsentEffect()
+        return DownloadConsentEffect()
+    if action is DownloadConsentAction.DISMISS:
+        return DownloadConsentEffect()
+    raise ValueError(f"unsupported download consent action: {action!r}")
 
 
 _REQUIRED_LOCAL_MODEL_FILES = (

@@ -79,7 +79,7 @@ def test_automatic_downloads_require_an_explicit_saved_policy() -> None:
 
 @pytest.mark.parametrize(
     "action",
-    (DownloadConsentAction.LOCAL, DownloadConsentAction.CANCEL),
+    (DownloadConsentAction.LOCAL, DownloadConsentAction.DISMISS),
 )
 def test_non_download_prompt_choices_do_not_enable_future_downloads(
     action: DownloadConsentAction,
@@ -93,6 +93,14 @@ def test_non_download_prompt_choices_do_not_enable_future_downloads(
     assert effect.allow_once is False
     assert preferences.download_policy is DownloadPolicy.ASK
     assert backend.sync_count == 0
+
+
+def test_unknown_download_prompt_action_fails_loudly() -> None:
+    with pytest.raises(ValueError, match="unsupported download consent action"):
+        apply_download_consent_action(
+            ModelPreferences(MemorySettings()),
+            "future-action",  # type: ignore[arg-type]
+        )
 
 
 def test_unknown_saved_download_policy_returns_to_ask() -> None:
