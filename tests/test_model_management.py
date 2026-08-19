@@ -6,8 +6,10 @@ from typing import Any
 import pytest
 
 from captionminer.model_management import (
+    DownloadConsentAction,
     DownloadPolicy,
     ModelPreferences,
+    apply_download_consent_action,
     huggingface_cache_directory,
     local_model_validation_error,
     resolve_installed_model,
@@ -39,16 +41,66 @@ def _model_folder(path: Path) -> Path:
     return path
 
 
-def test_download_policy_defaults_to_ask_and_persists_denial() -> None:
+def test_download_prompt_approval_is_one_time_and_preserves_ask_policy() -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+
+    effect = apply_download_consent_action(preferences, DownloadConsentAction.DOWNLOAD)
+
+    assert effect.allow_once is True
+    assert effect.choose_local is False
+    assert ModelPreferences(backend).download_policy is DownloadPolicy.ASK
+    assert backend.sync_count == 0
+
+
+def test_download_prompt_denial_is_persisted() -> None:
     backend = MemorySettings()
     preferences = ModelPreferences(backend)
 
     assert preferences.download_policy is DownloadPolicy.ASK
 
-    preferences.set_download_policy(DownloadPolicy.DENY)
+    effect = apply_download_consent_action(preferences, DownloadConsentAction.DENY)
 
+    assert effect.allow_once is False
+    assert effect.choose_local is False
     assert ModelPreferences(backend).download_policy is DownloadPolicy.DENY
     assert backend.sync_count == 1
+
+
+def test_automatic_downloads_require_an_explicit_saved_policy() -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+
+    preferences.set_download_policy(DownloadPolicy.ALLOW)
+
+    assert ModelPreferences(backend).download_policy is DownloadPolicy.ALLOW
+    assert backend.sync_count == 1
+
+
+@pytest.mark.parametrize(
+    "action",
+    (DownloadConsentAction.LOCAL, DownloadConsentAction.DISMISS),
+)
+def test_non_download_prompt_choices_do_not_enable_future_downloads(
+    action: DownloadConsentAction,
+) -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+
+    effect = apply_download_consent_action(preferences, action)
+
+    assert effect.choose_local is (action is DownloadConsentAction.LOCAL)
+    assert effect.allow_once is False
+    assert preferences.download_policy is DownloadPolicy.ASK
+    assert backend.sync_count == 0
+
+
+def test_unknown_download_prompt_action_fails_loudly() -> None:
+    with pytest.raises(ValueError, match="unsupported download consent action"):
+        apply_download_consent_action(
+            ModelPreferences(MemorySettings()),
+            "future-action",  # type: ignore[arg-type]
+        )
 
 
 def test_unknown_saved_download_policy_returns_to_ask() -> None:
