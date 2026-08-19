@@ -6,12 +6,15 @@ from typing import Any
 import pytest
 
 from captionminer.model_management import (
+    CUSTOM_MODEL_KEY,
     DownloadConsentAction,
     DownloadPolicy,
     ModelPreferences,
     apply_download_consent_action,
     huggingface_cache_directory,
     local_model_validation_error,
+    resolve_cached_model,
+    resolve_custom_model,
     resolve_installed_model,
 )
 
@@ -53,17 +56,44 @@ def test_download_prompt_approval_is_one_time_and_preserves_ask_policy() -> None
     assert backend.sync_count == 0
 
 
-def test_download_prompt_denial_is_persisted() -> None:
+def test_download_prompt_denial_without_remembering_preserves_ask_policy() -> None:
     backend = MemorySettings()
     preferences = ModelPreferences(backend)
-
-    assert preferences.download_policy is DownloadPolicy.ASK
 
     effect = apply_download_consent_action(preferences, DownloadConsentAction.DENY)
 
     assert effect.allow_once is False
     assert effect.choose_local is False
+    assert ModelPreferences(backend).download_policy is DownloadPolicy.ASK
+    assert backend.sync_count == 0
+
+
+def test_download_prompt_denial_is_persisted_when_requested() -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+
+    apply_download_consent_action(
+        preferences,
+        DownloadConsentAction.DENY,
+        remember=True,
+    )
+
     assert ModelPreferences(backend).download_policy is DownloadPolicy.DENY
+    assert backend.sync_count == 1
+
+
+def test_download_prompt_approval_can_enable_automatic_downloads_explicitly() -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+
+    effect = apply_download_consent_action(
+        preferences,
+        DownloadConsentAction.DOWNLOAD,
+        remember=True,
+    )
+
+    assert effect.allow_once is True
+    assert ModelPreferences(backend).download_policy is DownloadPolicy.ALLOW
     assert backend.sync_count == 1
 
 
@@ -87,7 +117,7 @@ def test_non_download_prompt_choices_do_not_enable_future_downloads(
     backend = MemorySettings()
     preferences = ModelPreferences(backend)
 
-    effect = apply_download_consent_action(preferences, action)
+    effect = apply_download_consent_action(preferences, action, remember=True)
 
     assert effect.choose_local is (action is DownloadConsentAction.LOCAL)
     assert effect.allow_once is False
@@ -120,6 +150,56 @@ def test_local_model_selection_is_validated_and_persisted(tmp_path) -> None:
     assert preferences.local_model_path("balanced") == model.resolve()
     preferences.clear_local_model_path("balanced")
     assert preferences.local_model_path("balanced") is None
+
+
+def test_custom_model_uses_one_dedicated_saved_selection(tmp_path) -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+    model = _model_folder(tmp_path / "my-local-model")
+
+    preferences.set_custom_model_path(model)
+
+    assert preferences.custom_model_path() == model.resolve()
+    assert backend.values[f"models/local/{CUSTOM_MODEL_KEY}"] == str(model.resolve())
+    lookup = resolve_custom_model(preferences)
+    assert lookup.selection is not None
+    assert lookup.selection.reference == str(model.resolve())
+    assert lookup.selection.location == model.resolve()
+    assert lookup.selection.local_files_only is True
+
+    preferences.clear_custom_model_path()
+    assert preferences.custom_model_path() is None
+
+
+def test_missing_or_invalid_custom_model_never_falls_back_to_network(tmp_path) -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+
+    assert resolve_custom_model(preferences).selection is None
+
+    missing = tmp_path / "missing"
+    backend.values[f"models/local/{CUSTOM_MODEL_KEY}"] = str(missing)
+    lookup = resolve_custom_model(preferences)
+
+    assert lookup.selection is None
+    assert lookup.invalid_local_path == missing
+    assert lookup.invalid_local_reason is not None
+
+
+def test_builtin_model_resolution_uses_only_its_cache_entry(tmp_path) -> None:
+    cached = _model_folder(tmp_path / "cached-medium")
+
+    selection = resolve_cached_model("medium", cache_lookup=lambda _name: cached)
+
+    assert selection is not None
+    assert selection.reference == "medium"
+    assert selection.location == cached
+    assert selection.source == "cache"
+    assert selection.local_files_only is True
+
+
+def test_builtin_model_resolution_does_not_invent_a_download() -> None:
+    assert resolve_cached_model("medium", cache_lookup=lambda _name: None) is None
 
 
 def test_incomplete_local_model_is_rejected(tmp_path) -> None:

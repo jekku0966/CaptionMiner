@@ -53,7 +53,7 @@ CREATE SUBTITLES
 
 1. Open CaptionMiner.exe.
 2. Drag one or more video or audio files into the window.
-3. Leave Accuracy profile on Balanced for normal use.
+3. Leave Accuracy profile / model on Balanced for normal use.
 4. Leave Spoken language on Auto-detect.
 5. Leave Processing device on Automatic.
 6. Leave Output folder empty to save each SRT beside its original file.
@@ -74,16 +74,18 @@ normal download because they are large.
 If the selected model is not already on the computer, CaptionMiner asks before
 downloading it from Hugging Face. Nothing is downloaded before that choice.
 
-- Download model: approve this download once and reuse the model later. This does
-  not enable automatic downloads for other missing models.
-- Choose local model folder: use a compatible model already on the computer.
-- No: disable automatic model downloads.
+- Download model: approve this download once and reuse the model later.
+- Choose custom model folder: use a compatible model already on the computer.
+- No: decline this download.
 
-If No was selected, use the Settings button to change the choice or select a
-local model folder later.
+The consent window also has a Don't ask me again box. Leave it unchecked to be
+asked again for the next missing model. If it is checked, Download model enables
+future automatic downloads and No disables them. Either saved choice can be
+changed later with the Settings button.
 
-Automatic downloads are enabled only by explicitly selecting Download
-automatically in Settings.
+Settings also lets you choose one custom local model. After it is validated,
+CaptionMiner selects Custom on the main Accuracy profile / model list and shows
+the custom folder name there so the main screen always shows what will be used.
 
 Downloaded models are normally stored here:
 
