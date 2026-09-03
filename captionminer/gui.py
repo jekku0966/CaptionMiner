@@ -35,9 +35,11 @@ from PySide6.QtWidgets import (
 from captionminer import __version__
 from captionminer.config import COMMON_LANGUAGES, MODEL_PROFILES, options_for_profile
 from captionminer.model_management import (
+    DownloadConsentAction,
     DownloadPolicy,
     ModelPreferences,
     ModelSelection,
+    apply_download_consent_action,
     huggingface_cache_directory,
     resolve_installed_model,
 )
@@ -584,25 +586,25 @@ class MainWindow(QMainWindow):
                         return selection
                 return None
 
-            action = self._ask_for_download_consent(profile_key)
-            if action == "download":
-                self._model_preferences.set_download_policy(DownloadPolicy.ALLOW)
+            effect = apply_download_consent_action(
+                self._model_preferences,
+                self._ask_for_download_consent(profile_key),
+            )
+            if effect.allow_once:
                 return ModelSelection(
                     reference=profile.model_name,
                     location=huggingface_cache_directory(),
                     source="download",
                     local_files_only=False,
                 )
-            if action == "local":
+            if effect.choose_local:
                 selection = self._choose_local_model_for_profile(profile_key)
                 if selection is not None:
                     return selection
                 return None
-            if action == "deny":
-                self._model_preferences.set_download_policy(DownloadPolicy.DENY)
             return None
 
-    def _ask_for_download_consent(self, profile_key: str) -> str:
+    def _ask_for_download_consent(self, profile_key: str) -> DownloadConsentAction:
         profile = MODEL_PROFILES[profile_key]
         message = QMessageBox(self)
         message.setIcon(QMessageBox.Question)
@@ -622,12 +624,12 @@ class MainWindow(QMainWindow):
 
         clicked = message.clickedButton()
         if clicked is download_button:
-            return "download"
+            return DownloadConsentAction.DOWNLOAD
         if clicked is local_button:
-            return "local"
+            return DownloadConsentAction.LOCAL
         if clicked is deny_button:
-            return "deny"
-        return "cancel"
+            return DownloadConsentAction.DENY
+        return DownloadConsentAction.DISMISS
 
     def _show_downloads_disabled(self, profile_key: str) -> str:
         profile = MODEL_PROFILES[profile_key]
