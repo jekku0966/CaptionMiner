@@ -259,6 +259,44 @@ def resolve_custom_model(preferences: ModelPreferences) -> InstalledModelLookup:
     )
 
 
+def migrate_legacy_profile_model(
+    preferences: ModelPreferences,
+    profile_key: str,
+) -> InstalledModelLookup:
+    """Move one valid pre-Custom profile model into the Custom slot.
+
+    Migration is deliberately driven by the profile the user selected. This avoids
+    choosing arbitrarily when an older installation saved different local models for
+    several profiles. An existing Custom choice is never overwritten.
+    """
+
+    if preferences.custom_model_path() is not None:
+        return InstalledModelLookup(selection=None)
+
+    saved_path = preferences.local_model_path(profile_key)
+    if saved_path is None:
+        return InstalledModelLookup(selection=None)
+
+    reason = local_model_validation_error(saved_path)
+    if reason is not None:
+        return InstalledModelLookup(
+            selection=None,
+            invalid_local_path=saved_path,
+            invalid_local_reason=reason,
+        )
+
+    resolved = saved_path.resolve()
+    preferences.set_custom_model_path(resolved)
+    preferences.clear_local_model_path(profile_key)
+    return InstalledModelLookup(
+        ModelSelection(
+            reference=str(resolved),
+            location=resolved,
+            source="local",
+        )
+    )
+
+
 def resolve_installed_model(
     profile_key: str,
     model_name: str,

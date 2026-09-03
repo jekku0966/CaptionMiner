@@ -42,6 +42,7 @@ from captionminer.model_management import (
     ModelSelection,
     apply_download_consent_action,
     huggingface_cache_directory,
+    migrate_legacy_profile_model,
     resolve_cached_model,
     resolve_custom_model,
 )
@@ -619,48 +620,70 @@ class MainWindow(QMainWindow):
     def _select_model_for_transcription(self, profile_key: str) -> ModelSelection | None:
         profile = MODEL_PROFILES[profile_key]
 
-        cached_selection = resolve_cached_model(profile.model_name)
-        if cached_selection is not None:
-            return cached_selection
-
-        policy = self._model_preferences.download_policy
-        if policy is DownloadPolicy.ALLOW:
-            return ModelSelection(
-                reference=profile.model_name,
-                location=huggingface_cache_directory(),
-                source="download",
-                local_files_only=False,
+        while True:
+            legacy_lookup = migrate_legacy_profile_model(
+                self._model_preferences,
+                profile_key,
             )
-        if policy is DownloadPolicy.DENY:
-            action = self._show_downloads_disabled(profile_key)
-            if action == "settings":
-                self.open_settings()
+            if legacy_lookup.invalid_local_reason:
+                QMessageBox.warning(
+                    self,
+                    "Local model unavailable",
+                    legacy_lookup.invalid_local_reason
+                    + "\n\nThe old saved selection will be removed. You can configure it "
+                    "again as the Custom model after fixing the folder.",
+                )
+                self._model_preferences.clear_local_model_path(profile_key)
+                continue
+            if legacy_lookup.selection is not None:
+                self._refresh_custom_profile_item()
+                self._set_profile_key(CUSTOM_MODEL_KEY)
+                return legacy_lookup.selection
+
+            cached_selection = resolve_cached_model(profile.model_name)
+            if cached_selection is not None:
+                return cached_selection
+
+            policy = self._model_preferences.download_policy
+            if policy is DownloadPolicy.ALLOW:
+                return ModelSelection(
+                    reference=profile.model_name,
+                    location=huggingface_cache_directory(),
+                    source="download",
+                    local_files_only=False,
+                )
+            if policy is DownloadPolicy.DENY:
+                action = self._show_downloads_disabled(profile_key)
+                if action == "settings":
+                    self.open_settings()
+                    if str(self.profile_combo.currentData()) == CUSTOM_MODEL_KEY:
+                        return self._select_custom_model_for_transcription()
+                    continue
+                if action == "local":
+                    selection = self._choose_custom_model()
+                    if selection is not None:
+                        return selection
                 return None
-            if action == "local":
+
+            consent_action, remember = self._ask_for_download_consent(profile_key)
+            effect = apply_download_consent_action(
+                self._model_preferences,
+                consent_action,
+                remember=remember,
+            )
+            if effect.allow_once:
+                return ModelSelection(
+                    reference=profile.model_name,
+                    location=huggingface_cache_directory(),
+                    source="download",
+                    local_files_only=False,
+                )
+            if effect.choose_local:
                 selection = self._choose_custom_model()
                 if selection is not None:
                     return selection
+                return None
             return None
-
-        consent_action, remember = self._ask_for_download_consent(profile_key)
-        effect = apply_download_consent_action(
-            self._model_preferences,
-            consent_action,
-            remember=remember,
-        )
-        if effect.allow_once:
-            return ModelSelection(
-                reference=profile.model_name,
-                location=huggingface_cache_directory(),
-                source="download",
-                local_files_only=False,
-            )
-        if effect.choose_local:
-            selection = self._choose_custom_model()
-            if selection is not None:
-                return selection
-            return None
-        return None
 
     def _select_custom_model_for_transcription(self) -> ModelSelection | None:
         lookup = resolve_custom_model(self._model_preferences)

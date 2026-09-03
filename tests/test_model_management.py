@@ -13,6 +13,7 @@ from captionminer.model_management import (
     apply_download_consent_action,
     huggingface_cache_directory,
     local_model_validation_error,
+    migrate_legacy_profile_model,
     resolve_cached_model,
     resolve_custom_model,
     resolve_installed_model,
@@ -184,6 +185,49 @@ def test_missing_or_invalid_custom_model_never_falls_back_to_network(tmp_path) -
     assert lookup.selection is None
     assert lookup.invalid_local_path == missing
     assert lookup.invalid_local_reason is not None
+
+
+def test_selected_legacy_profile_model_migrates_to_custom(tmp_path) -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+    model = _model_folder(tmp_path / "old-balanced-model")
+    backend.values["models/local/balanced"] = str(model)
+
+    lookup = migrate_legacy_profile_model(preferences, "balanced")
+
+    assert lookup.selection is not None
+    assert lookup.selection.reference == str(model.resolve())
+    assert preferences.custom_model_path() == model.resolve()
+    assert preferences.local_model_path("balanced") is None
+
+
+def test_legacy_profile_model_never_replaces_an_existing_custom_model(tmp_path) -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+    custom = _model_folder(tmp_path / "custom")
+    legacy = _model_folder(tmp_path / "legacy")
+    preferences.set_custom_model_path(custom)
+    backend.values["models/local/balanced"] = str(legacy)
+
+    lookup = migrate_legacy_profile_model(preferences, "balanced")
+
+    assert lookup.selection is None
+    assert preferences.custom_model_path() == custom.resolve()
+    assert preferences.local_model_path("balanced") == legacy
+
+
+def test_invalid_legacy_profile_model_is_reported_without_migration(tmp_path) -> None:
+    backend = MemorySettings()
+    preferences = ModelPreferences(backend)
+    missing = tmp_path / "missing"
+    backend.values["models/local/balanced"] = str(missing)
+
+    lookup = migrate_legacy_profile_model(preferences, "balanced")
+
+    assert lookup.selection is None
+    assert lookup.invalid_local_path == missing
+    assert lookup.invalid_local_reason is not None
+    assert preferences.custom_model_path() is None
 
 
 def test_builtin_model_resolution_uses_only_its_cache_entry(tmp_path) -> None:
