@@ -106,7 +106,8 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 
 - **Local transcription** — media stays on the machine running CaptionMiner.
 - **Explicit model-download consent** — an uncached model is never downloaded by the GUI before the user chooses whether to allow it.
-- **Manual local models** — each profile can use a compatible faster-whisper/CTranslate2 model folder without network access.
+- **Manual local models** — configure one compatible faster-whisper/CTranslate2 folder and select it as Custom without network access.
+- **Miner-family desktop theme** — CaptionMiner uses HighlightMiner's dark navy, gold, border, and text palette while keeping its own focused workflow.
 - **Video and audio input** — PyAV decodes formats supported by its bundled FFmpeg libraries.
 - **No separate FFmpeg install** — `faster-whisper` uses PyAV, which ships FFmpeg libraries in its Python package.
 - **NVIDIA GPU support** — CTranslate2 uses CUDA when available.
@@ -132,7 +133,7 @@ Compatibility means that the editors can import CaptionMiner's SRT structure. It
 
 ![CaptionMiner desktop GUI layout preview](docs/assets/captionminer-gui-preview.png)
 
-> **Layout preview:** shown with example queue entries so the file list is visible. CaptionMiner uses native PySide6/Qt controls, so fonts, title-bar appearance, spacing, and control styling can vary slightly with the installed Windows version, display scaling, and system theme.
+> **Layout preview:** shown with example queue entries so the file list is visible. CaptionMiner applies the same Miner-family palette as HighlightMiner. The Windows title bar, file/folder pickers, fonts, and display scaling remain native and can vary slightly between systems.
 
 The interface is deliberately utilitarian: queue clips, select transcription settings, choose where the SRT files go, manage model-download behavior, and start the batch. Subtitle styling remains entirely inside Resolve, Premiere Pro, or CapCut.
 
@@ -259,7 +260,7 @@ This is different from HighlightMiner's broader analysis/export pipeline, which 
 
 ## Model profiles
 
-The GUI exposes four understandable profiles instead of demanding that every user memorize model checkpoint names:
+The main GUI selector exposes four built-in profiles plus one user-supplied Custom model instead of demanding that every user memorize checkpoint names:
 
 | Profile | faster-whisper model | Intended use |
 |---|---|---|
@@ -267,6 +268,7 @@ The GUI exposes four understandable profiles instead of demanding that every use
 | Balanced | `medium` | Default general-purpose option. |
 | Accurate | `large-v2` | Quality-first option with focused gap recovery; slower than a single pass. |
 | Experimental | `large-v3` | Gap recovery plus a model that still needs broader validation on exported clips. |
+| Custom | User-selected local folder | Uses the Balanced transcription behavior with a compatible local model selected in Settings. |
 
 The CLI also permits an advanced `--model` override for another faster-whisper model name or a compatible local model directory.
 
@@ -310,7 +312,7 @@ dist\CaptionMiner-v0.2.0-alpha.1-windows-x64.zip
 
 Double-click `CaptionMiner.exe` to open the GUI. The folder's `_internal` directory must remain beside it. This is intentionally PyInstaller **onedir**, like HighlightMiner, instead of a literal `--onefile` package that extracts the Qt/CTranslate2 runtime on every launch. Optional locally supplied NVIDIA DLLs belong in the ready-made `runtime\cuda` staging folder; the builder recreates that folder if needed, copies only its documented CUDA 12 / cuDNN 9 allowlist, and does not sweep unrelated repository DLLs.
 
-The packaged app does not require Python. Whisper models are not bundled. When a selected model is missing, the GUI asks before connecting to Hugging Face and can instead use a compatible local model folder. See [`START_HERE.txt`](START_HERE.txt) for release-user instructions and [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md) for the exact build contents, switches, CI artifact, CUDA behavior, and troubleshooting.
+The packaged app does not require Python. Whisper models are not bundled. When a selected model is missing, the GUI asks before connecting to Hugging Face and can instead switch to one compatible Custom local model folder. See [`START_HERE.txt`](START_HERE.txt) for release-user instructions and [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md) for the exact build contents, switches, CI artifact, CUDA behavior, and troubleshooting.
 
 The ZIP uploaded by the packaging workflow is short-lived CI output for regression testing. Only Windows packages manually attached by the maintainer to CaptionMiner's public [GitHub Releases page](https://github.com/jekku0966/CaptionMiner/releases) are official CaptionMiner binaries. Official packages are built from the matching public tag and include separate SHA-256 checksums plus a provenance manifest; the source repository remains the source of truth for application code.
 
@@ -357,7 +359,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 5. Optionally enter names/terms in **Custom vocabulary**.
 6. Leave the output folder empty to create each SRT beside its source clip.
 7. Click **Transcribe**.
-8. If that model is not installed, explicitly allow its download or choose a compatible local model folder.
+8. If that model is not installed, explicitly allow its download or choose a compatible Custom model folder.
 
 Example result:
 
@@ -383,9 +385,9 @@ MP3, WAV, M4A, AAC, FLAC, OGG, Opus
 
 The **All files** option remains available because actual decoding support is determined by PyAV/FFmpeg, not the file-extension list.
 
-### Accuracy profile
+### Accuracy profile / model
 
-Selects the model and recovery behavior described in [Model profiles](#model-profiles). If the model is not installed, CaptionMiner asks before downloading it or lets the user choose a compatible local folder. Model loading can dominate processing time for a very short clip. Accurate and Experimental can perform additional focused inference after the primary pass; this is expected rather than the progress bar developing trust issues again.
+This main-screen selector is the single source of truth for the model used by the next batch. It selects the built-in model and recovery behavior described in [Model profiles](#model-profiles), or the Custom local model configured in Settings. Selecting an unconfigured Custom entry opens Settings; after a folder is validated, the main selector shows that folder's name. Model loading can dominate processing time for a very short clip. Accurate and Experimental can perform additional focused inference after the primary pass; this is expected rather than the progress bar developing trust issues again.
 
 ### Settings and local models
 
@@ -395,7 +397,7 @@ The **Settings** button controls what happens when a selected model is missing:
 - **Download automatically** — permit future missing profile models to download without another prompt.
 - **Never download automatically** — prevent model downloads until this preference is changed.
 
-The same dialog can associate a profile with a compatible local faster-whisper/CTranslate2 model folder, remove that association, and open the standard downloaded-model cache. A manually selected folder must contain at least `config.json`, `model.bin`, and `tokenizer.json`; requiring the tokenizer locally prevents a nominally offline model from causing a secondary tokenizer download.
+Settings does not contain a second built-in-profile selector. It configures one Custom faster-whisper/CTranslate2 model folder, clears that custom selection, and opens the standard downloaded-model cache. Choosing a valid custom folder selects **Custom — folder-name** on the main screen so the two screens cannot contradict each other. A manually selected folder must contain at least `config.json`, `model.bin`, and `tokenizer.json`; requiring the tokenizer locally prevents a nominally offline model from causing a secondary tokenizer download.
 
 These small preferences use Qt's native per-user settings storage. On Windows, they are stored for the current user rather than in a `settings.json` beside the executable. Model weights remain in the Hugging Face cache or the manually selected folder and are never copied into the settings store.
 
@@ -634,7 +636,7 @@ No fixed speed number is promised for the current alpha because no standardized 
 
 ## First-run model download and offline use
 
-When a model name such as `medium`, `large-v2`, or experimental `large-v3` is selected for the first time, the GUI asks for permission before faster-whisper downloads the compatible model from Hugging Face Hub. Choosing **Download model** authorizes only that requested download and does not silently enable future automatic downloads. Choosing **No** stores that refusal, prevents the transcription from starting, and can be changed later through **Settings**. Permanent automatic downloads are enabled only when the user explicitly selects **Download automatically** in Settings. CaptionMiner does not host or proxy these model files.
+When a model name such as `medium`, `large-v2`, or experimental `large-v3` is selected for the first time, the GUI asks for permission before faster-whisper downloads the compatible model from Hugging Face Hub. Choosing **Download model** authorizes only that requested download, while **No** declines only that attempt; with the default unchecked **Don't ask me again** box, the same question returns the next time the missing model is requested. Checking the box remembers the button choice: **Download model** enables future automatic downloads and **No** disables them. Either saved choice can be changed later through **Settings**. CaptionMiner does not host or proxy these model files.
 
 The default Windows cache location is:
 
@@ -646,7 +648,7 @@ The default Windows cache location is:
 
 After the model is cached, CaptionMiner resolves it with local-files-only behavior so starting a transcription does not silently check for or download a replacement. A future cache cleanup, profile change, new Windows account, or fresh machine can require another explicit choice.
 
-For offline use, select a complete local model folder in the consent prompt or Settings. CaptionMiner validates the required model files and passes the folder directly to faster-whisper with networking disabled for that load. CaptionMiner does not certify the trustworthiness or identity of an arbitrary user-supplied model; obtain it through a source you trust.
+For offline use, select a complete custom model folder in the consent prompt or Settings. CaptionMiner validates the required model files, switches the main selector to Custom, and passes the folder directly to faster-whisper with networking disabled for that load. Custom currently uses the Balanced transcription behavior. CaptionMiner does not certify the trustworthiness or identity of an arbitrary user-supplied model; obtain it through a source you trust.
 
 If a corporate firewall, proxy, antivirus product, or restricted DNS policy blocks Hugging Face, the first model load will fail. Resolve that network policy or pre-populate a compatible local model cache; do not repeatedly reinstall CaptionMiner and expect the firewall to become emotionally available.
 
@@ -997,7 +999,7 @@ The correct expectation is **a strong local first-pass transcript that saves typ
 ### v0.2 — current alpha
 
 - Validate the repeatable Windows application build on a clean non-development machine.
-- Added explicit first-run model download consent, persistent download policy, and manually selected offline model folders.
+- Added explicit first-run model download consent, persistent download policy, and one manually selected Custom offline model.
 - Add byte-level first-run model download progress if the upstream model-loading API exposes it reliably.
 - Persist additional safe GUI preferences only where doing so removes repeated work without hiding behavior.
 - Add optional watch-folder/batch automation if real usage justifies it.

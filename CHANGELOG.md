@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added a Miner-family Qt theme using HighlightMiner's dark navy, gold, text, and border palette.
+- Added one Custom model entry to the main Accuracy profile / model selector; its label reflects the configured local folder.
+
+### Changed
+
+- Made the main Accuracy profile / model selector authoritative and removed the duplicate profile selector from Settings.
+- Changed Settings to manage only download behavior and the single Custom local model.
+- Added a Don't ask me again checkbox to missing-model consent so Download model and No remain one-time choices unless the user explicitly asks CaptionMiner to remember them.
+
 ### Fixed
 
 - Kept one-time model-download approval from silently enabling automatic downloads for future missing models.
