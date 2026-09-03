@@ -10,6 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
+CUSTOM_MODEL_KEY = "custom"
+
 
 class DownloadPolicy(str, Enum):
     """How CaptionMiner should behave when a selected model is not installed."""
@@ -92,6 +94,21 @@ class ModelPreferences:
         self._backend.remove(self._local_model_key(profile_key))
         self._backend.sync()
 
+    def custom_model_path(self) -> Path | None:
+        """Return the single custom model exposed by the desktop interface."""
+
+        return self.local_model_path(CUSTOM_MODEL_KEY)
+
+    def set_custom_model_path(self, path: Path) -> None:
+        """Validate and persist the desktop interface's custom model."""
+
+        self.set_local_model_path(CUSTOM_MODEL_KEY, path)
+
+    def clear_custom_model_path(self) -> None:
+        """Remove the desktop interface's custom-model selection."""
+
+        self.clear_local_model_path(CUSTOM_MODEL_KEY)
+
     @classmethod
     def _local_model_key(cls, profile_key: str) -> str:
         if not re.fullmatch(r"[a-z0-9_-]+", profile_key):
@@ -102,15 +119,20 @@ class ModelPreferences:
 def apply_download_consent_action(
     preferences: ModelPreferences,
     action: DownloadConsentAction,
+    *,
+    remember: bool = False,
 ) -> DownloadConsentEffect:
-    """Apply a prompt choice without turning one approval into a global opt-in."""
+    """Apply one prompt choice and persist it only when explicitly requested."""
 
     if action is DownloadConsentAction.DOWNLOAD:
+        if remember:
+            preferences.set_download_policy(DownloadPolicy.ALLOW)
         return DownloadConsentEffect(allow_once=True)
     if action is DownloadConsentAction.LOCAL:
         return DownloadConsentEffect(choose_local=True)
     if action is DownloadConsentAction.DENY:
-        preferences.set_download_policy(DownloadPolicy.DENY)
+        if remember:
+            preferences.set_download_policy(DownloadPolicy.DENY)
         return DownloadConsentEffect()
     if action is DownloadConsentAction.DISMISS:
         return DownloadConsentEffect()
@@ -195,6 +217,48 @@ class InstalledModelLookup:
     invalid_local_reason: str | None = None
 
 
+def resolve_cached_model(
+    model_name: str,
+    *,
+    cache_lookup: ModelCacheLookup = find_cached_model,
+) -> ModelSelection | None:
+    """Resolve one built-in profile model from the local Hugging Face cache."""
+
+    cached_path = cache_lookup(model_name)
+    if cached_path is None:
+        return None
+    return ModelSelection(
+        reference=model_name,
+        location=cached_path,
+        source="cache",
+    )
+
+
+def resolve_custom_model(preferences: ModelPreferences) -> InstalledModelLookup:
+    """Resolve the one custom local model configured by the desktop interface."""
+
+    saved_path = preferences.custom_model_path()
+    if saved_path is None:
+        return InstalledModelLookup(selection=None)
+
+    reason = local_model_validation_error(saved_path)
+    if reason is not None:
+        return InstalledModelLookup(
+            selection=None,
+            invalid_local_path=saved_path,
+            invalid_local_reason=reason,
+        )
+
+    resolved = saved_path.resolve()
+    return InstalledModelLookup(
+        ModelSelection(
+            reference=str(resolved),
+            location=resolved,
+            source="local",
+        )
+    )
+
+
 def resolve_installed_model(
     profile_key: str,
     model_name: str,
@@ -219,14 +283,10 @@ def resolve_installed_model(
             )
         invalid_path = saved_path
 
-    cached_path = cache_lookup(model_name)
-    if cached_path is not None:
+    cached_selection = resolve_cached_model(model_name, cache_lookup=cache_lookup)
+    if cached_selection is not None:
         return InstalledModelLookup(
-            ModelSelection(
-                reference=model_name,
-                location=cached_path,
-                source="cache",
-            ),
+            cached_selection,
             invalid_local_path=invalid_path,
             invalid_local_reason=invalid_reason,
         )
