@@ -10,12 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Added a Miner-family Qt theme using HighlightMiner's dark navy, gold, text, and border palette.
 - Added one Custom model entry to the main Accuracy profile / model selector; its label reflects the configured local folder.
+- Added always-on local Standard diagnostic logging with app/session, batch/file, runtime, recovery, language, subtitle, SRT-write, warning, error, and redacted traceback events.
+- Added one-batch Detailed diagnostics with redacted model decisions, settings, stage timings, segment/word counts, gap/window data, and subtitle-construction statistics.
+- Added Settings actions for selecting the diagnostic mode, opening the log folder, copying a redacted summary, and deleting logs.
+- Added strict five-by-1-MB Standard and two-by-5-MB Detailed rotation with no automatic upload.
 
 ### Changed
 
 - Made the main Accuracy profile / model selector authoritative and removed the duplicate profile selector from Settings.
 - Changed Settings to manage only download behavior and the single Custom local model.
 - Added a Don't ask me again checkbox to missing-model consent so Download model and No remain one-time choices unless the user explicitly asks CaptionMiner to remember them.
+- Kept persistent diagnostics separate from the existing on-screen activity log and automatically reset Detailed mode after its next batch starts.
 
 ### Fixed
 

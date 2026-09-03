@@ -97,6 +97,28 @@ Other programs may also use the Hugging Face cache, so do not delete the whole
 cache without checking its contents.
 
 
+DIAGNOSTIC LOGS
+---------------
+
+CaptionMiner always keeps a small Standard diagnostic log on this computer.
+It does not upload logs automatically. The on-screen activity log still works
+normally.
+
+Open Settings to:
+
+- Keep Standard logging selected for normal use.
+- Select Detailed diagnostics for next batch when investigating a problem.
+  It automatically returns to Standard after that batch starts.
+- Open the local log folder.
+- Copy a short diagnostic summary for a bug report.
+- Delete all CaptionMiner logs.
+
+CaptionMiner keeps five Standard logs up to 1 MB each and two Detailed logs up
+to 5 MB each. Persistent logs exclude spoken/subtitle text, custom vocabulary,
+complete media and output paths, local model paths, passwords, tokens,
+environment variables, and media contents.
+
+
 USING THE SUBTITLES
 -------------------
 
@@ -122,4 +144,6 @@ Report problems here:
 https://github.com/jekku0966/CaptionMiner/issues
 
 Include the CaptionMiner version, Windows version, GPU model, selected profile,
-and the error shown in the CaptionMiner log.
+the error shown in the on-screen log, and the redacted summary from
+Settings > Copy diagnostic summary. Attach a persistent log only after checking
+it yourself; CaptionMiner will never upload one for you.

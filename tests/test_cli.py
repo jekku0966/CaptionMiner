@@ -9,6 +9,7 @@ from captionminer.cli import (
     ModelDownloadPermissionError,
     _build_options,
     _prepare_options,
+    _prepare_transcription,
     build_parser,
 )
 from captionminer.model_management import DownloadPolicy, ModelPreferences
@@ -49,10 +50,14 @@ def test_balanced_cli_profile_remains_single_pass() -> None:
     assert options.recover_gaps is False
 
 
+def test_cli_exposes_one_batch_detailed_diagnostics_flag() -> None:
+    args = _parse_transcribe("--detailed-diagnostics")
+
+    assert args.detailed_diagnostics is True
+
+
 def test_model_override_keeps_the_selected_profiles_recovery_behavior() -> None:
-    options = _build_options(
-        _parse_transcribe("--profile", "accurate", "--model", "custom-model")
-    )
+    options = _build_options(_parse_transcribe("--profile", "accurate", "--model", "custom-model"))
 
     assert options.model_name == "custom-model"
     assert options.recover_gaps is True
@@ -104,6 +109,14 @@ def test_cli_uses_cached_model_without_download_permission(tmp_path) -> None:
 
     assert options.model_name == "medium"
     assert options.local_files_only is True
+
+    prepared = _prepare_transcription(
+        _parse_transcribe(),
+        preferences=ModelPreferences(MemorySettings()),
+        cache_lookup=lambda _model_name: tmp_path,
+    )
+    assert prepared.source_type == "cache"
+    assert prepared.model_reference == "medium"
 
 
 def test_cli_uses_valid_manual_model_folder_without_network(tmp_path) -> None:
