@@ -30,3 +30,9 @@ The setup process installs packages from the configured Python package index. Fi
 ## Output safety
 
 CaptionMiner writes only to the selected output directory. Existing SRT files are preserved by default. Enabling overwrite authorizes replacement of the exact destination SRT, not modification of the source media.
+
+## Local diagnostic logs
+
+CaptionMiner writes size-limited diagnostic logs to the current user's local application-data area and never uploads them automatically. Persisted fields are centrally allowlisted and exclude transcript/subtitle text, custom-vocabulary contents, complete media/output paths, local model paths, credentials, environment variables, and media contents. Tracebacks keep exception types and complete stack structure while reducing source locations to file basenames and omitting arbitrary exception and warning message bodies.
+
+Users should still inspect any diagnostic file before sharing it. Use **Settings → Copy diagnostic summary** when a compact redacted report is sufficient, and use **Delete logs** when local retention is no longer wanted.

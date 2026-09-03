@@ -24,6 +24,7 @@ def test_miner_theme_styles_primary_actions_progress_and_focus() -> None:
         "QProgressBar::chunk",
         "QLineEdit:focus",
         "QListWidget::item:selected",
+        "QRadioButton::indicator",
     ):
         assert selector in MINER_STYLESHEET
 
